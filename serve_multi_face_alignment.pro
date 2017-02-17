@@ -31,14 +31,14 @@ HEADERS += \
 
 INCLUDEPATH += /home/jby/caffe/include \
                             /home/jby/caffe/build/include \
-                            /usr/include/eigen3 \
+                            /home/jby/eigen3 \
                             /usr/local/cuda-7.5/include \
                             /usr/include \
                             /usr/local/include \
 
 LIBS += -L/home/jby/caffe/build/lib \
-            -L/usr/lib/x86_64-linux-gnu \
-            -L/usr/local/lib/OpenMesh \
+            -L/usr/local/lib \
+	    -L/usr/lib64/
 
 LIBS += -lcaffe -lglog -lboost_system -lprotobuf \
         -lopencv_core -lopencv_highgui -lopencv_imgproc \

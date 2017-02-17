@@ -6,7 +6,7 @@ train::train()
     m_traindata_root = "../../multi_learn_data/clip_data_224/";
     m_savemodel_root = "../save_model/";
     m_para_num = 6;
-    m_casscade_sum = 2;
+    m_casscade_sum = 5;
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
     //used in compute_shapes_exps_R_b()
     per_face_img_random_train_data_num=5;
@@ -204,11 +204,12 @@ void train::compute_all_visible_features()
     int index=0;
     int img_size = 0;
     for(; iter!=m_face_imgs.end(); iter++)
-    {
-        std::cout<<index<<" face img feature start compute"<<std::endl;
+    {        
         compute_per_face_imgs_visiblefeatures(iter,index,img_size);
         img_size+=iter->img_size();
         index++;
+        if(index%500==0)
+            std::cout<<index<<" face img features have been computed"<<std::endl;
     }
 }
 
@@ -470,9 +471,9 @@ void train::compute_shapes_exps_R_b()
         std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
         exit(1);
     }
-    m_para_Rs[m_casscade_level]=temp.transpose();
+    m_shape_exp_Rs[m_casscade_level]=temp.transpose();
     std::cout<<"done! "<<std::endl;
-    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<m_para_Rs[m_casscade_level].norm()<<"; sqrt energy is "<<(lhs*temp-rhs).norm()<<std::endl;
+    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<m_shape_exp_Rs[m_casscade_level].norm()<<"; sqrt energy is "<<(lhs*temp-rhs).norm()<<std::endl;
 }
 
 void train::update_shape_exp()

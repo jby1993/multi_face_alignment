@@ -17,6 +17,8 @@ public:
     void train_model();
     void save_para_result(int casscade_level);
     void save_shape_exp_result(int casscade_level);
+    void set_train_data_root(const std::string &root){m_traindata_root=root;}
+    void set_save_model_root(const std::string &root){m_savemodel_root=root;}
 private:
     void initial_shape_exp_with_mean();
     void initial_para();
