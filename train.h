@@ -11,7 +11,7 @@ class train
 {
     typedef part_3DMM_face Face;
 public:
-    train();
+    train(int thread_num);
     ~train(){}
     void read_train_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist);
     void train_model();

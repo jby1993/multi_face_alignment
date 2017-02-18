@@ -5,7 +5,7 @@
 #include "cuda.h"
 #include <cuda_runtime.h>
 //#include <Eigen/IterativeLinearSolvers>
-train::train()
+train::train(int thread_num)
 {
     m_traindata_root = "../../multi_learn_data/clip_data_224/";
     m_savemodel_root = "../save_model/";
@@ -14,7 +14,7 @@ train::train()
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
     //used in compute_shapes_exps_R_b()
     per_face_img_random_train_data_num=5;
-    m_threadnum_for_compute_features=1;
+    m_threadnum_for_compute_features=thread_num;
     m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
     m_3dmm_meshs.resize(m_threadnum_for_compute_features,part_3DMM_face());
     m_gpuid_for_feature_compute=0;

@@ -8,9 +8,8 @@ int main(int argc, char *argv[])
 
     //close caffe log output
     FLAGS_minloglevel=1;
-    train my_train;
+    train my_train(12);
     my_train.set_feature_compute_gpu(0);
-    my_train.set_feature_compute_thread_num(1);
     my_train.set_matrix_compute_gpu(0);
     my_train.set_train_data_root("/data_b/jby/multiclassdata/clip_data_224/");
     my_train.set_save_model_root("../save_model/");
