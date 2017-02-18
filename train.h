@@ -19,7 +19,7 @@ public:
     void save_shape_exp_result(int casscade_level);
     void set_train_data_root(const std::string &root){m_traindata_root=root;}
     void set_save_model_root(const std::string &root){m_savemodel_root=root;}
-    void set_feature_compute_gpu(int id){m_gpuid_for_feature_compute=id;}
+    void set_feature_compute_gpu(const std::vector<int> ids);
     void set_matrix_compute_gpu(int id){m_gpuid_for_matrix_compute=id;}
     void set_feature_compute_thread_num(int num){m_threadnum_for_compute_features=num;}
 
@@ -68,7 +68,7 @@ private:
     int m_casscade_level;
     int per_face_img_random_train_data_num;
     int m_threadnum_for_compute_features;
-    int m_gpuid_for_feature_compute;
+    std::vector<int> m_gpuid_for_feature_computes;
     int m_gpuid_for_matrix_compute; //mainly for rankUpdate computation
 #ifdef USE_CNNFEATURE
     std::vector<CNNDenseFeature> m_feature_detectors;

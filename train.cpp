@@ -15,9 +15,15 @@ train::train(int thread_num)
     //used in compute_shapes_exps_R_b()
     per_face_img_random_train_data_num=5;
     m_threadnum_for_compute_features=thread_num;
-    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
-    m_3dmm_meshs.resize(m_threadnum_for_compute_features,part_3DMM_face());
-    m_gpuid_for_feature_compute=0;
+    for(int i=0;i<m_threadnum_for_compute_features;i++)
+    {
+        m_feature_detectors.push_back(CNNDenseFeature());
+        m_3dmm_meshs.push_back(part_3DMM_face());
+        std::cout<<i<<std::endl;
+    }
+//    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
+//    m_3dmm_meshs.resize(m_threadnum_for_compute_features,part_3DMM_face());
+    m_gpuid_for_feature_computes.resize(1,0);
     m_gpuid_for_matrix_compute=0;
 #ifdef USE_CNNFEATURE
     m_feature_size=64;
@@ -148,6 +154,16 @@ void train::save_shape_exp_result(int casscade_level)
     fclose(file);
 }
 
+void train::set_feature_compute_gpu(const std::vector<int> ids)
+{
+    if(ids.size()!=m_threadnum_for_compute_features)
+    {
+        std::cout<<"train::set_feature_compute_gpu ids size wrong"<<std::endl;
+        m_gpuid_for_feature_computes.resize(1,0);
+    }
+    m_gpuid_for_feature_computes=ids;
+}
+
 void train::initial_shape_exp_with_mean()
 {
     m_train_shapes.setZero();
@@ -248,12 +264,14 @@ void train::compute_all_visible_features_multi_thread()
     #pragma omp parallel for num_threads(m_threadnum_for_compute_features)
     for(int i=0;i<m_face_imgs_pointer.size();i++)
     {
+
+        int thread_id=omp_get_thread_num();
         //for Caffe set thread independent Caffe setting, this is essential, otherwise non-major thread caffe will
         //not take the setting on CNNDenseFeature, like setmode(GPU), still default CPU
         Caffe::set_mode(Caffe::GPU);
-        Caffe::SetDevice(m_gpuid_for_feature_compute);
+        Caffe::SetDevice(m_gpuid_for_feature_computes[thread_id]);
 
-        int thread_id=omp_get_thread_num();
+
         compute_per_face_imgs_visiblefeatures_multi_thread(m_face_imgs_pointer[i],i,m_before_imgsize[i],thread_id);
         nums[thread_id]=nums[thread_id]+1;
         if(nums.sum()%500==0)

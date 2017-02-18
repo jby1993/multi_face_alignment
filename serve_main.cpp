@@ -8,8 +8,12 @@ int main(int argc, char *argv[])
 
     //close caffe log output
     FLAGS_minloglevel=1;
-    train my_train(12);
-    my_train.set_feature_compute_gpu(0);
+    int thread_num=8;
+    train my_train(thread_num);
+    std::vector<int> ids;
+    for(int i=0;i<thread_num;i++)
+        ids.push_back(i);
+    my_train.set_feature_compute_gpu(ids);
     my_train.set_matrix_compute_gpu(0);
     my_train.set_train_data_root("/data_b/jby/multiclassdata/clip_data_224/");
     my_train.set_save_model_root("../save_model/");
