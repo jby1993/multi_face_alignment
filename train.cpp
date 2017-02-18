@@ -17,9 +17,9 @@ train::train(int thread_num)
     m_threadnum_for_compute_features=thread_num;
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
-        m_feature_detectors.push_back(CNNDenseFeature());
+//        m_feature_detectors.push_back(CNNDenseFeature());
         m_3dmm_meshs.push_back(part_3DMM_face());
-        std::cout<<i<<std::endl;
+//        std::cout<<i<<std::endl;
     }
 //    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
 //    m_3dmm_meshs.resize(m_threadnum_for_compute_features,part_3DMM_face());
@@ -156,12 +156,19 @@ void train::save_shape_exp_result(int casscade_level)
 
 void train::set_feature_compute_gpu(const std::vector<int> ids)
 {
+    m_feature_detectors.clear();
     if(ids.size()!=m_threadnum_for_compute_features)
     {
         std::cout<<"train::set_feature_compute_gpu ids size wrong"<<std::endl;
         m_gpuid_for_feature_computes.resize(1,0);
+        m_feature_detectors.push_back(CNNDenseFeature(0));
     }
     m_gpuid_for_feature_computes=ids;
+    for(int i=0;i<m_threadnum_for_compute_features;i++)
+    {
+        m_feature_detectors.push_back(CNNDenseFeature(m_gpuid_for_feature_computes[i]));
+        std::cout<<"Net "<<i<<" has been build."<<std::endl;
+    }
 }
 
 void train::initial_shape_exp_with_mean()

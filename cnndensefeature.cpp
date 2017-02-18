@@ -1,6 +1,6 @@
 #include "cnndensefeature.h"
 #include "io_utils.h"
-CNNDenseFeature::CNNDenseFeature()
+CNNDenseFeature::CNNDenseFeature(int gpu_id)
 {
     f_length=224;   //normalized image size
     f_dimension=64;
@@ -21,6 +21,7 @@ CNNDenseFeature::CNNDenseFeature()
 
 
     Caffe::set_mode(Caffe::GPU);
+    Caffe::SetDevice(gpu_id);
 // feature extraction net
     features.resize(img_size*f_dimension,0.0);
     construct_net("../resource/feature_extraction_net.prototxt","../resource/feature_extraction_net.caffemodel");
