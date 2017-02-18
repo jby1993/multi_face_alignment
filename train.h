@@ -27,9 +27,11 @@ private:
     //compute groundtruth para substract train para
     void compute_delta_para(Eigen::MatrixXf &delta_para);
     void compute_delta_shape_exp(Eigen::MatrixXf &delta_para);
-    void compute_all_visible_features();
-    void compute_per_face_imgs_visiblefeatures(const std::list<face_imgs>::iterator &iter, int index, int img_size);
-    void compute_keypoint_visible(const MatrixXf &R, int width, int height, std::vector<bool> &visuals);
+//    void compute_all_visible_features();
+    void compute_all_visible_features_multi_thread();
+//    void compute_per_face_imgs_visiblefeatures(const std::list<face_imgs>::iterator &iter, int index, int img_size);
+    void compute_per_face_imgs_visiblefeatures_multi_thread(face_imgs *iter, int index, int img_size, int thread_id);
+    void compute_keypoint_visible_multi_thread(const MatrixXf &R, std::vector<bool> &visuals, int thread_id);
     void compute_paras_R_b();
     void update_para();
     void show_delta_para_info();
@@ -46,6 +48,10 @@ private:
 private:
     //using list to allocate non continus memory, when data is large, which is more safe
     std::list<face_imgs>    m_face_imgs;
+    //the 2 is for multithread need
+    std::vector<face_imgs*> m_face_imgs_pointer;    //save m_face_imgs pointer with list iterator order
+    std::vector<int> m_before_imgsize;  //save before one face_imgs all img num
+
     int m_face_img_num;
     int m_all_img_num;
     int m_para_num;
@@ -53,12 +59,13 @@ private:
     int m_casscade_sum;
     int m_casscade_level;
     int per_face_img_random_train_data_num;
+    int m_threadnum_for_compute_features;
 #ifdef USE_CNNFEATURE
-    CNNDenseFeature m_feature_detector;
+    std::vector<CNNDenseFeature> m_feature_detectors;
 #else
 
 #endif
-    part_3DMM_face  m_3dmm_mesh;
+    std::vector<part_3DMM_face>  m_3dmm_meshs;
     std::string m_traindata_root;
     std::string m_savemodel_root;
     divide_orientation_space m_orien_choose;

@@ -114,6 +114,20 @@ void write_all_type_to_bin(const vector<T> &ids, const string &file, bool write_
     fclose(f);
 }
 template<typename T>
+void write_all_type_to_bin(T* data, const string &file, int write_size, bool save_size=false)
+{
+    FILE *f=fopen(file.data(),"wb");
+    if(f==NULL)
+    {
+        std::cout<<"open file fail!"<<std::endl;
+        return ;
+    }
+    if(save_size)
+        fwrite(&write_size,sizeof(int),1,f);
+    fwrite(data,sizeof(T),write_size,f);
+    fclose(f);
+}
+template<typename T>
 void read_all_type_from_bin(const string &file, int size, vector<T> &ids)
 {
     FILE* f=fopen(file.data(), "rb");

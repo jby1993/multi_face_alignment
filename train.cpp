@@ -1,6 +1,7 @@
 #include "train.h"
 #include "io_utils.h"
 #include <QString>
+//#include <Eigen/IterativeLinearSolvers>
 train::train()
 {
     m_traindata_root = "../../multi_learn_data/clip_data_224/";
@@ -10,6 +11,14 @@ train::train()
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
     //used in compute_shapes_exps_R_b()
     per_face_img_random_train_data_num=5;
+    m_threadnum_for_compute_features=2;
+    for(int i=0;i<m_threadnum_for_compute_features;i++)
+    {
+        m_feature_detectors.push_back(CNNDenseFeature());
+        std::cout<<i<<std::endl;
+    }
+//    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
+    m_3dmm_meshs.resize(m_threadnum_for_compute_features,part_3DMM_face());
 #ifdef USE_CNNFEATURE
     m_feature_size=64;
 #else
@@ -28,7 +37,7 @@ void train::read_train_img_datas(const std::string &meshpara_list, const std::st
     io_utils::read_all_type_rowsfile_to_2vector<std::string>(permesh_imglist.data(),per_imgfiles);
     m_face_imgs.clear();
     m_all_img_num=0;
-	std::cout<<"start read person imgs..."<<std::endl;
+	std::cout<<"start read person imgs..."<<std::endl;    
     for(int i=0; i<mesh_files.size(); i++)
     {
         face_imgs temp(m_traindata_root,mesh_files[i],
@@ -43,6 +52,19 @@ void train::read_train_img_datas(const std::string &meshpara_list, const std::st
 			std::cout<<i<<" person imgs have been readed."<<std::endl;
     }
 	std::cout<<"read "<<mesh_files.size()<<" person imgs "<<"done!"<<std::endl;
+
+    //initial need by multithread feature computation variables
+    m_face_imgs_pointer.clear();
+    m_before_imgsize.clear();
+    std::list<face_imgs>::iterator iter=m_face_imgs.begin();
+    int before_imgsize=0;
+    for(;iter!=m_face_imgs.end();iter++)
+    {
+        m_face_imgs_pointer.push_back(&(*iter));
+        m_before_imgsize.push_back(before_imgsize);
+        before_imgsize+=iter->img_size();
+    }
+
     m_face_img_num = m_face_imgs.size();
     m_train_paras.resize(m_para_num,m_all_img_num);
     m_train_shapes.resize(Face::get_shape_pcanum(),m_face_img_num);
@@ -67,7 +89,7 @@ void train::train_model()
     for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
     {
         std::cout<<"start compute visible features"<<std::endl;
-        compute_all_visible_features();
+        compute_all_visible_features_multi_thread();
         std::cout<<"done!"<<std::endl;
         compute_paras_R_b();
         update_para();
@@ -75,7 +97,7 @@ void train::train_model()
         save_para_result(m_casscade_level);
         //learn id and exp
 		std::cout<<"start compute visible features"<<std::endl;
-		compute_all_visible_features();
+        compute_all_visible_features_multi_thread();
 		std::cout<<"done!"<<std::endl;
 ////divide id and exp to train
 //        compute_shapes_R_b();
@@ -204,22 +226,40 @@ void train::compute_delta_shape_exp(MatrixXf &delta_para)
     }
 }
 
-void train::compute_all_visible_features()
+//void train::compute_all_visible_features()
+//{
+//    std::list<face_imgs>::iterator iter = m_face_imgs.begin();
+//    int index=0;
+//    int img_size = 0;
+//    for(; iter!=m_face_imgs.end(); iter++)
+//    {
+//        compute_per_face_imgs_visiblefeatures(iter,index,img_size);
+//        img_size+=iter->img_size();
+//        index++;
+//        if(index%500==0)
+//            std::cout<<index<<" face img features have been computed"<<std::endl;
+//    }
+//}
+
+void train::compute_all_visible_features_multi_thread()
 {
-    std::list<face_imgs>::iterator iter = m_face_imgs.begin();
-    int index=0;
-    int img_size = 0;
-    for(; iter!=m_face_imgs.end(); iter++)
-    {        
-        compute_per_face_imgs_visiblefeatures(iter,index,img_size);
-        img_size+=iter->img_size();
-        index++;
-        if(index%500==0)
-            std::cout<<index<<" face img features have been computed"<<std::endl;
+    Eigen::VectorXi nums(m_threadnum_for_compute_features);
+    nums.setZero();
+    #pragma omp parallel for num_threads(m_threadnum_for_compute_features)
+    for(int i=0;i<m_face_imgs_pointer.size();i++)
+    {
+        int thread_id=omp_get_thread_num();
+        if(thread_id==1)
+            std::cout<<"here"<<std::endl;
+        compute_per_face_imgs_visiblefeatures_multi_thread(m_face_imgs_pointer[i],i,m_before_imgsize[i],thread_id);
+//        nums[thread_id]=nums[thread_id]+1;
+//        if(nums.sum()%500==0)
+//            std::cout<<"face img features have been computed a 500"<<std::endl;
+        std::cout<<i<<std::endl;
     }
 }
 
-void train::compute_per_face_imgs_visiblefeatures(const std::list<face_imgs>::iterator &iter, int index, int img_size)
+void train::compute_per_face_imgs_visiblefeatures_multi_thread(face_imgs *iter, int index, int img_size, int thread_id)
 {
     for(int i=0;i<iter->img_size();i++)
     {
@@ -236,11 +276,11 @@ void train::compute_per_face_imgs_visiblefeatures(const std::list<face_imgs>::it
         Eigen::Matrix3f R = transformation.rotation();
 //        m_3dmm_mesh.set_shape(iter->get_groundtruth_shapes());
 //        m_3dmm_mesh.set_exp(iter->get_groundtruth_exps());
-        m_3dmm_mesh.set_shape(m_train_shapes.col(index));
-        m_3dmm_mesh.set_exp(m_train_exps.col(index));
+        m_3dmm_meshs[thread_id].set_shape(m_train_shapes.col(index));
+        m_3dmm_meshs[thread_id].set_exp(m_train_exps.col(index));
 //        m_3dmm_mesh.update_mesh(false);
         Eigen::MatrixXf temp_v;
-        m_3dmm_mesh.get_vertex_matrix(temp_v,false);
+        m_3dmm_meshs[thread_id].get_vertex_matrix(temp_v,false);
         temp_v  = R*temp_v;
         temp_v *=scale;
         Eigen::Vector3f trans;  trans(0) = tx;  trans(1) = ty;  trans(2) = 0.0;
@@ -257,7 +297,7 @@ void train::compute_per_face_imgs_visiblefeatures(const std::list<face_imgs>::it
             feature_pos(1,j) = iter->img_length()-feature_pos(1,j);
         //visibles compute; can change to use openGL, more accurate
         std::vector<bool>   visuals;
-        compute_keypoint_visible(R,iter->img_length(),iter->img_length(),visuals);
+        compute_keypoint_visible_multi_thread(R,visuals,thread_id);
         // add extract feature code, para: grayImage feature_pos visuals, result:  visible_features; need to compute visible
         Eigen::VectorXf visible_features(m_feature_size*Face::get_keypoints_size());
 //        Eigen::VectorXf scales(m_keypoint_id.size()); scales.setOnes();
@@ -265,19 +305,19 @@ void train::compute_per_face_imgs_visiblefeatures(const std::list<face_imgs>::it
 //        if(!m_feature_detector->DescriptorOnCustomPoints(image,visuals,feature_pos,scales,visible_features) )
 //            std::cout<<"----------------feature computation has some wrong-----------------------"<<std::endl;
 
-        m_feature_detector.set_data(iter->get_img(i));
-        m_feature_detector.get_compute_visible_posfeatures(feature_pos,visuals,visible_features);
+        m_feature_detectors[thread_id].set_data(iter->get_img(i));
+        m_feature_detectors[thread_id].get_compute_visible_posfeatures(feature_pos,visuals,visible_features);
 
         m_visible_features.col(col) = visible_features;
     }
 }
 
-void train::compute_keypoint_visible(const Eigen::MatrixXf &R,int width, int height, std::vector<bool> &visuals)
+void train::compute_keypoint_visible_multi_thread(const Eigen::MatrixXf &R, std::vector<bool> &visuals, int thread_id)
 {
     //this mesh's coordinate have not times Rotation
-    const TriMesh& temp_mesh = m_3dmm_mesh.get_part_face();
+    const TriMesh& temp_mesh = m_3dmm_meshs[thread_id].get_part_face();
     visuals.resize(Face::get_keypoints_size(), false);
-    TriMesh::Normal zdir(0.0,0.0,1.0);
+//    TriMesh::Normal zdir(0.0,0.0,1.0);
     for(int i=0; i< Face::get_keypoints_size(); i++)
     {
         int id = Face::get_part_keypoints()[i];
@@ -325,8 +365,13 @@ void train::compute_paras_R_b()
 
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
     std::cout<<"casscade para "<<m_casscade_level<<" compute for A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
+//using Dense decompose
+    Eigen::MatrixXf temp = lhs.llt().solve(rhs);
+//    //using ConjugateGradient method
+//    Eigen::ConjugateGradient<Eigen::MatrixXf,Lower|Upper> cg;
+//    cg.compute(lhs);
+//    Eigen::MatrixXf temp=cg.solve(rhs);
 
-    Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
     if(check_matrix_invalid(temp))
     {
         std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
@@ -472,9 +517,17 @@ void train::compute_shapes_exps_R_b()
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
     std::cout<<"casscade para "<<m_casscade_level<<" compute for pca para A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
 
-    Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
-//    Eigen::MatrixXf temp(lhs.rows(),rhs.cols());
-    temp.setZero();
+//    io_utils::write_all_type_to_bin<float>(lhs.data(),"lhs_matrix.bin",lhs.size(),true);
+//    io_utils::write_all_type_to_bin<float>(rhs.data(),"rhs_matrix.bin",rhs.size(),true);
+
+    //using Dense decompose method
+    Eigen::MatrixXf temp = lhs.llt().solve(rhs);
+
+//    //using ConjugateGradient method
+//    Eigen::ConjugateGradient<Eigen::MatrixXf,Lower|Upper> cg;
+//    cg.compute(lhs);
+//    Eigen::MatrixXf temp=cg.solve(rhs);
+
     if(check_matrix_invalid(temp))
     {
         std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
