@@ -9,7 +9,7 @@ train::train()
     m_casscade_sum = 5;
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
     //used in compute_shapes_exps_R_b()
-    per_face_img_random_train_data_num=5;
+    per_face_img_random_train_data_num=0;
 #ifdef USE_CNNFEATURE
     m_feature_size=64;
 #else
@@ -28,17 +28,21 @@ void train::read_train_img_datas(const std::string &meshpara_list, const std::st
     io_utils::read_all_type_rowsfile_to_2vector<std::string>(permesh_imglist.data(),per_imgfiles);
     m_face_imgs.clear();
     m_all_img_num=0;
+	std::cout<<"start read person imgs..."<<std::endl;
     for(int i=0; i<mesh_files.size(); i++)
     {
         face_imgs temp(m_traindata_root,mesh_files[i],
                        Face::get_shape_pcanum(),Face::get_exp_pcanum());
-        temp.set_img_num(per_imgfiles[i].size());
+        temp.set_img_num(per_imgfiles[i]);
         temp.read_imgs();
         temp.read_pose_paras();
         temp.read_shape_exp();
         m_face_imgs.push_back(temp);
         m_all_img_num+=per_imgfiles[i].size();
+		if(i%100==99)
+			std::cout<<i<<" person imgs have been readed."<<std::endl;
     }
+	std::cout<<"read "<<mesh_files.size()<<" person imgs "<<"done!"<<std::endl;
     m_face_img_num = m_face_imgs.size();
     m_train_paras.resize(m_para_num,m_all_img_num);
     m_train_shapes.resize(Face::get_shape_pcanum(),m_face_img_num);
@@ -70,7 +74,9 @@ void train::train_model()
         show_delta_para_info();
         save_para_result(m_casscade_level);
         //learn id and exp
-        compute_all_visible_features();
+		std::cout<<"start compute visible features"<<std::endl;
+		compute_all_visible_features();
+		std::cout<<"done!"<<std::endl;
 ////divide id and exp to train
 //        compute_shapes_R_b();
 //        update_shape();
@@ -431,6 +437,7 @@ void train::compute_shapes_exps_R_b()
     for(; iter!=m_face_imgs.end(); iter++)
     {
         //first face img's all img to train
+		choose_ids.clear();
         for(int i=0;i<iter->img_size();i++)
             choose_ids.push_back(i);
         compute_regular_feature_from_multi_imgs(before_img_size,choose_ids,regu_features);

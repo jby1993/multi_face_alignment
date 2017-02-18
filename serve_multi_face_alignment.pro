@@ -41,6 +41,6 @@ LIBS += -L/home/jby/caffe/build/lib \
 	    -L/usr/lib64/
 
 LIBS += -lcaffe -lglog -lboost_system -lprotobuf \
-        -lopencv_core -lopencv_highgui -lopencv_imgproc \
+        -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_imgcodecs\
         -lOpenMeshCore -lOpenMeshTools \
 

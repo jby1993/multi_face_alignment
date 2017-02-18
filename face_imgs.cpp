@@ -14,13 +14,11 @@ face_imgs::face_imgs(const std::string &root, const std::string &meshparas_name,
     initial();
 }
 
-void face_imgs::set_img_num(int num)
+void face_imgs::set_img_num(const std::vector<std::string>& imgfiles_name)
 {
-    if(m_img_num!=num)
-    {
-        m_img_num = num;
-        resize_data();
-    }
+    m_imgfiles_name = imgfiles_name;
+	m_img_num = m_imgfiles_name.size();
+	resize_data();
 }
 
 void face_imgs::read_imgs()
@@ -29,12 +27,12 @@ void face_imgs::read_imgs()
     {
         QString num;
         num.setNum(i);
-        std::string imgname=m_face_name+"_"+num.toStdString()+".jpg";
+        std::string imgname=m_imgfiles_name[i];
         cv::Mat tmp=cv::imread(m_files_root+imgname,cv::IMREAD_GRAYSCALE);
         tmp.convertTo(tmp,CV_32F,1.0);
         if(tmp.rows!=m_img_length||tmp.cols!=m_img_length)
         {
-            std::cout<<"face_imgs::read_imgs read img size is wrong!"<<std::endl;
+			std::cout<<"face_imgs::read_imgs read img"<<imgname<<" size is wrong!"<<std::endl;			
             exit(1);
         }
         std::vector<float> img;

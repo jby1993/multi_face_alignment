@@ -8,7 +8,7 @@ class face_imgs
 {
 public:
     face_imgs(const std::string &root, const std::string &meshparas_name,int shape_dim, int exp_dim);
-    void set_img_num(int num);
+    void set_img_num(const std::vector<std::string>& imgfiles_name);
     void read_imgs();
     void read_pose_paras();
     void read_shape_exp();
@@ -31,6 +31,7 @@ private:
     int m_img_length;
     //img datas are left up origin, to make correspond to CNNFeature
     std::vector<std::vector<float> >    m_imgs_data;
+	std::vector<std::string>    m_imgfiles_name;
     //all this paras's 3DMM is left down origin
     Eigen::MatrixXf m_groundtruth_paras;
     Eigen::VectorXf m_groundtruth_shapes;
