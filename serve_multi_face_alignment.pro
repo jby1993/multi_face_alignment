@@ -41,7 +41,7 @@ INCLUDEPATH += /home/jby/caffe/include \
 
 LIBS += -L/home/jby/caffe/build/lib \
             -L/usr/local/lib \
-	    -L/usr/lib64/
+	    -L/usr/lib64/ \
 	-L/usr/local/cuda-7.5/lib64 \
 
 LIBS += -lcaffe -lglog -lboost_system -lprotobuf \
