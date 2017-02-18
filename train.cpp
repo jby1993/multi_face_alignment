@@ -1,6 +1,9 @@
 #include "train.h"
 #include "io_utils.h"
 #include <QString>
+#include "supplement_gpu_math_functions.hpp"
+#include "cuda.h"
+#include <cuda_runtime.h>
 //#include <Eigen/IterativeLinearSolvers>
 train::train()
 {
@@ -11,14 +14,11 @@ train::train()
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
     //used in compute_shapes_exps_R_b()
     per_face_img_random_train_data_num=5;
-    m_threadnum_for_compute_features=2;
-    for(int i=0;i<m_threadnum_for_compute_features;i++)
-    {
-        m_feature_detectors.push_back(CNNDenseFeature());
-        std::cout<<i<<std::endl;
-    }
-//    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
+    m_threadnum_for_compute_features=1;
+    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
     m_3dmm_meshs.resize(m_threadnum_for_compute_features,part_3DMM_face());
+    m_gpuid_for_feature_compute=0;
+    m_gpuid_for_matrix_compute=0;
 #ifdef USE_CNNFEATURE
     m_feature_size=64;
 #else
@@ -248,14 +248,16 @@ void train::compute_all_visible_features_multi_thread()
     #pragma omp parallel for num_threads(m_threadnum_for_compute_features)
     for(int i=0;i<m_face_imgs_pointer.size();i++)
     {
+        //for Caffe set thread independent Caffe setting, this is essential, otherwise non-major thread caffe will
+        //not take the setting on CNNDenseFeature, like setmode(GPU), still default CPU
+        Caffe::set_mode(Caffe::GPU);
+        Caffe::SetDevice(m_gpuid_for_feature_compute);
+
         int thread_id=omp_get_thread_num();
-        if(thread_id==1)
-            std::cout<<"here"<<std::endl;
         compute_per_face_imgs_visiblefeatures_multi_thread(m_face_imgs_pointer[i],i,m_before_imgsize[i],thread_id);
-//        nums[thread_id]=nums[thread_id]+1;
-//        if(nums.sum()%500==0)
-//            std::cout<<"face img features have been computed a 500"<<std::endl;
-        std::cout<<i<<std::endl;
+        nums[thread_id]=nums[thread_id]+1;
+        if(nums.sum()%500==0)
+            std::cout<<"face img features have been computed a 500"<<std::endl;
     }
 }
 
@@ -351,10 +353,16 @@ void train::compute_paras_R_b()
 //    const int R_row = m_para_num;
     const int R_col = Face::get_keypoints_size()*m_feature_size+1;
     Eigen::MatrixXf lhs(R_col,R_col);
-    Eigen::MatrixXf rhs(R_col,m_para_num);    
+    Eigen::MatrixXf rhs(R_col,m_para_num);
+
     std::cout<<"start rankUpdate..."<<std::endl;
-    lhs.block(0,0,R_col-1,R_col-1).selfadjointView<Eigen::Upper>().rankUpdate(m_visible_features,1.0);
+//    lhs.block(0,0,R_col-1,R_col-1).selfadjointView<Eigen::Upper>().rankUpdate(m_visible_features,1.0);
+    //using gpu to compute rankUpdate
+    Eigen::MatrixXf rankTemp;
+    my_gpu_rankUpdated(rankTemp,m_visible_features,1.0,m_gpuid_for_matrix_compute);
+    lhs.block(0,0,R_col-1,R_col-1)=rankTemp;
     std::cout<<"done"<<std::endl;
+
     lhs.block(0,R_col-1,R_col-1,1) = m_visible_features.rowwise().sum();
     lhs(R_col-1,R_col-1) = float(m_all_img_num);
     //add regular
@@ -366,7 +374,7 @@ void train::compute_paras_R_b()
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
     std::cout<<"casscade para "<<m_casscade_level<<" compute for A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
 //using Dense decompose
-    Eigen::MatrixXf temp = lhs.llt().solve(rhs);
+    Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
 //    //using ConjugateGradient method
 //    Eigen::ConjugateGradient<Eigen::MatrixXf,Lower|Upper> cg;
 //    cg.compute(lhs);
@@ -506,9 +514,13 @@ void train::compute_shapes_exps_R_b()
     const int R_col = m_regu_features.rows();
     Eigen::MatrixXf lhs(R_col,R_col);
     Eigen::MatrixXf rhs(R_col,expand_delta_x.cols());
+
     std::cout<<"start rankUpdate..."<<std::endl;
-    lhs.selfadjointView<Eigen::Upper>().rankUpdate(m_regu_features,1.0);
+//    lhs.selfadjointView<Eigen::Upper>().rankUpdate(m_regu_features,1.0);
+    //using gpu to compute rankUpdate
+    my_gpu_rankUpdated(lhs,m_regu_features,1.0,m_gpuid_for_matrix_compute);
     std::cout<<"done"<<std::endl;
+
     //add regular
     lhs+=(lamda*Eigen::VectorXf(R_col).setOnes()).asDiagonal();
 
@@ -521,7 +533,7 @@ void train::compute_shapes_exps_R_b()
 //    io_utils::write_all_type_to_bin<float>(rhs.data(),"rhs_matrix.bin",rhs.size(),true);
 
     //using Dense decompose method
-    Eigen::MatrixXf temp = lhs.llt().solve(rhs);
+    Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
 
 //    //using ConjugateGradient method
 //    Eigen::ConjugateGradient<Eigen::MatrixXf,Lower|Upper> cg;
@@ -591,4 +603,38 @@ bool train::check_matrix_invalid(const MatrixXf &matrix)
         data++;
     }
     return false;
+}
+
+void train::my_gpu_rankUpdated(MatrixXf &C, const MatrixXf &A, float a, int gpu_id)
+{
+    if(A.size()==0)
+    {
+        std::cout<<"train::my_gpu_rankUpdated input matrix are empty!"<<std::endl;
+        exit(1);
+    }
+    void *C_data;
+    void *A_data;
+    int C_size=A.rows()*A.rows()*sizeof(float);
+    int A_size=A.size()*sizeof(float);
+    Caffe::SetDevice(gpu_id);
+    CUDA_CHECK(cudaGetDevice(&gpu_id));
+    CUDA_CHECK(cudaMalloc(&C_data, C_size));
+    caffe_gpu_memset(C_size, 0, C_data);
+
+    CUDA_CHECK(cudaMalloc(&A_data, A_size));
+    caffe_gpu_memcpy(A_size, A.data(), A_data);
+
+    gpu_rankUpdate((float*)C_data,(float*)A_data,A.rows(),A.cols(),a);
+
+    void *temp_cpu_C_data;
+    bool cpu_malloc_use_cuda;
+    CaffeMallocHost(&temp_cpu_C_data, C_size, &cpu_malloc_use_cuda);
+    caffe_gpu_memcpy(C_size, C_data, temp_cpu_C_data);
+
+    C.resize(A.rows(),A.rows());
+    memcpy(C.data(),temp_cpu_C_data,C_size);
+
+    CUDA_CHECK(cudaFree(C_data));
+    CUDA_CHECK(cudaFree(A_data));
+    CaffeFreeHost(temp_cpu_C_data,cpu_malloc_use_cuda);
 }

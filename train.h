@@ -19,6 +19,12 @@ public:
     void save_shape_exp_result(int casscade_level);
     void set_train_data_root(const std::string &root){m_traindata_root=root;}
     void set_save_model_root(const std::string &root){m_savemodel_root=root;}
+    void set_feature_compute_gpu(int id){m_gpuid_for_feature_compute=id;}
+    void set_matrix_compute_gpu(int id){m_gpuid_for_matrix_compute=id;}
+    void set_feature_compute_thread_num(int num){m_threadnum_for_compute_features=num;}
+
+    //compute C=a*A*AT, C can not pre allocate
+    static void my_gpu_rankUpdated(Eigen::MatrixXf &C, const Eigen::MatrixXf &A, float a, int gpu_id);
 private:
     void initial_shape_exp_with_mean();
     void initial_para();
@@ -45,6 +51,8 @@ private:
     void depand_delta_x_with_num(int num, const Eigen::MatrixXf &expand_delta_x, Eigen::MatrixXf &delta_x);
 
     bool check_matrix_invalid(const Eigen::MatrixXf &matrix);
+
+
 private:
     //using list to allocate non continus memory, when data is large, which is more safe
     std::list<face_imgs>    m_face_imgs;
@@ -60,6 +68,8 @@ private:
     int m_casscade_level;
     int per_face_img_random_train_data_num;
     int m_threadnum_for_compute_features;
+    int m_gpuid_for_feature_compute;
+    int m_gpuid_for_matrix_compute; //mainly for rankUpdate computation
 #ifdef USE_CNNFEATURE
     std::vector<CNNDenseFeature> m_feature_detectors;
 #else

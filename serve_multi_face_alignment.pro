@@ -9,6 +9,8 @@ CONFIG -= app_bundle
 
 TEMPLATE = app
 
+QMAKE_CXXFLAGS += -fopenmp
+
 SOURCES += serve_main.cpp \
     cnndensefeature.cpp \
     io_utils.cpp \
@@ -27,7 +29,8 @@ HEADERS += \
     train.h \
     divide_orientation_space.h \
     random_num_generator.h \
-    random_tool.h
+    random_tool.h \
+    supplement_gpu_math_functions.hpp
 
 INCLUDEPATH += /home/jby/caffe/include \
                             /home/jby/caffe/build/include \
@@ -39,8 +42,11 @@ INCLUDEPATH += /home/jby/caffe/include \
 LIBS += -L/home/jby/caffe/build/lib \
             -L/usr/local/lib \
 	    -L/usr/lib64/
+	-L/usr/local/cuda-7.5/lib64 \
 
 LIBS += -lcaffe -lglog -lboost_system -lprotobuf \
         -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_imgcodecs\
         -lOpenMeshCore -lOpenMeshTools \
+	-lgomp -lpthread \
+        -lcuda -lcudart -lcublas\
 
