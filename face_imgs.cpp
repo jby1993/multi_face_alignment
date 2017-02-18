@@ -57,7 +57,9 @@ void face_imgs::read_pose_paras()
     {
         QString num;
         num.setNum(i);
-        std::string paraname=m_face_name+"_"+num.toStdString()+"_pose.txt";
+        QString tempname(m_imgfiles_name[i].data());
+        tempname.remove(tempname.size()-4,4);
+        std::string paraname=tempname.toStdString()+"_pose.txt";
         std::vector<float> paras;
         io_utils::read_all_type_file_to_vector<float>(m_files_root+paraname, paras);
 //        Eigen::Affine3f transformation;

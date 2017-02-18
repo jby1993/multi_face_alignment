@@ -9,7 +9,7 @@ train::train()
     m_casscade_sum = 5;
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
     //used in compute_shapes_exps_R_b()
-    per_face_img_random_train_data_num=0;
+    per_face_img_random_train_data_num=5;
 #ifdef USE_CNNFEATURE
     m_feature_size=64;
 #else
@@ -473,6 +473,8 @@ void train::compute_shapes_exps_R_b()
     std::cout<<"casscade para "<<m_casscade_level<<" compute for pca para A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
 
     Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
+//    Eigen::MatrixXf temp(lhs.rows(),rhs.cols());
+    temp.setZero();
     if(check_matrix_invalid(temp))
     {
         std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
@@ -491,8 +493,8 @@ void train::update_shape_exp()
     //unnormalize paras
     delta_x = m_groundtruth_shapes_exps_sd.asDiagonal()*delta_x;
 
-    m_train_shapes+=delta_x.block(0,0,Face::get_shape_pcanum(),1);
-    m_train_exps+=delta_x.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),1);
+    m_train_shapes+=delta_x.block(0,0,Face::get_shape_pcanum(),m_face_img_num);
+    m_train_exps+=delta_x.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),m_face_img_num);
 }
 
 void train::show_delta_shape_exp_info()
