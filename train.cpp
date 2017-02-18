@@ -326,7 +326,7 @@ void train::compute_paras_R_b()
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
     std::cout<<"casscade para "<<m_casscade_level<<" compute for A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
 
-    Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
+    Eigen::MatrixXf temp = lhs.llt().solve(rhs);
     if(check_matrix_invalid(temp))
     {
         std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
@@ -472,9 +472,9 @@ void train::compute_shapes_exps_R_b()
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
     std::cout<<"casscade para "<<m_casscade_level<<" compute for pca para A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
 
-    Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
+    Eigen::MatrixXf temp = lhs.llt().solve(rhs);
 //    Eigen::MatrixXf temp(lhs.rows(),rhs.cols());
-    temp.setZero();
+//    temp.setZero();
     if(check_matrix_invalid(temp))
     {
         std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
