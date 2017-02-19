@@ -7,8 +7,9 @@
 //#include <Eigen/IterativeLinearSolvers>
 train::train(int thread_num)
 {
-    m_traindata_root = "../../multi_learn_data/clip_data_224/";
+    m_data_root = "../../multi_learn_data/clip_data_224/";
     m_savemodel_root = "../save_model/";
+    m_para_mean_sd_file="../resource/para_mean_sd.bin";
     m_para_num = 6;
     m_casscade_sum = 5;
     //per face_img, except all imgs to train, random select 10 times random num imgs to join train, add robust
@@ -31,9 +32,10 @@ train::train(int thread_num)
     m_feature_size=128;
 #endif
     compute_shapes_exps_mean_sd();
+    read_para_mean_sd();
 }
 
-void train::read_train_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist)
+void train::read_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist)
 {
     std::vector<std::string> mesh_files;
 //    get_meshpara_names(root, mesh_files);
@@ -43,10 +45,10 @@ void train::read_train_img_datas(const std::string &meshpara_list, const std::st
     io_utils::read_all_type_rowsfile_to_2vector<std::string>(permesh_imglist.data(),per_imgfiles);
     m_face_imgs.clear();
     m_all_img_num=0;
-	std::cout<<"start read person imgs..."<<std::endl;    
+    LOG(INFO)<<"start read person imgs...";
     for(int i=0; i<mesh_files.size(); i++)
     {
-        face_imgs temp(m_traindata_root,mesh_files[i],
+        face_imgs temp(m_data_root,mesh_files[i],
                        Face::get_shape_pcanum(),Face::get_exp_pcanum());
         temp.set_img_num(per_imgfiles[i]);
         temp.read_imgs();
@@ -54,10 +56,9 @@ void train::read_train_img_datas(const std::string &meshpara_list, const std::st
         temp.read_shape_exp();
         m_face_imgs.push_back(temp);
         m_all_img_num+=per_imgfiles[i].size();
-		if(i%100==99)
-			std::cout<<i<<" person imgs have been readed."<<std::endl;
+        LOG_IF(INFO,i%100==99)<<i<<" person imgs have been readed.";
     }
-	std::cout<<"read "<<mesh_files.size()<<" person imgs "<<"done!"<<std::endl;
+    LOG(INFO)<<"read "<<mesh_files.size()<<" person imgs "<<"done!";
 
     //initial need by multithread feature computation variables
     m_face_imgs_pointer.clear();
@@ -77,7 +78,8 @@ void train::read_train_img_datas(const std::string &meshpara_list, const std::st
     m_train_exps.resize(Face::get_exp_pcanum(),m_face_img_num);
     m_visible_features.resize(Face::get_keypoints_size()*m_feature_size,m_all_img_num);
 
-    compute_para_mean_sd();
+//    compute_para_mean_sd();
+//    save_para_mean_sd();
 }
 
 void train::train_model()
@@ -94,17 +96,13 @@ void train::train_model()
 
     for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
     {
-        std::cout<<"start compute visible features"<<std::endl;
         compute_all_visible_features_multi_thread();
-        std::cout<<"done!"<<std::endl;
         compute_paras_R_b();
         update_para();
         show_delta_para_info();
         save_para_result(m_casscade_level);
         //learn id and exp
-		std::cout<<"start compute visible features"<<std::endl;
         compute_all_visible_features_multi_thread();
-		std::cout<<"done!"<<std::endl;
 ////divide id and exp to train
 //        compute_shapes_R_b();
 //        update_shape();
@@ -117,9 +115,66 @@ void train::train_model()
 
         //combine shape and exp to train
         compute_shapes_exps_R_b();
-        update_shape_exp();
+        update_shape_exp(per_face_img_random_train_data_num);
         show_delta_shape_exp_info();
         save_shape_exp_result(m_casscade_level);
+    }
+}
+
+void train::verify_model()
+{
+    initial_shape_exp_with_mean();
+    initial_para();
+    m_casscade_level=-1;
+    show_delta_para_info();
+    show_delta_shape_exp_info();
+
+    for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
+    {
+        compute_all_visible_features_multi_thread();
+        update_para();
+        show_delta_para_info();
+        //learn id and exp
+        compute_all_visible_features_multi_thread();
+        //only use a face all imgs to verify
+        compute_regular_features(0);
+        update_shape_exp(0);
+        show_delta_shape_exp_info();
+    }
+}
+
+void train::save_verify_result(const std::string &root)
+{
+    for(int i=0;i<m_face_imgs_pointer.size();i++)
+    {
+        face_imgs *data = m_face_imgs_pointer[i];
+        std::string file=root+data->get_face_name()+"_mesh_para.txt";
+        Eigen::VectorXf temp(Face::get_shape_pcanum()+Face::get_exp_pcanum());
+        temp.block(0,0,Face::get_shape_pcanum(),1) = m_train_shapes.col(i);
+        temp.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),1) = m_train_exps.col(i);
+        io_utils::write_all_type_to_file<float>(temp,file);
+        const std::vector<std::string> &names=data->get_imgfiles_name();
+        for(int j=0;j<data->img_size();j++)
+        {
+            int id = m_before_imgsize[i]+j;
+            QString tname(names[j].data());
+            tname.remove(temp.size()-4,4);
+            file = root+tname.toStdString()+"_pose.txt";
+            io_utils::write_all_type_to_file<float>(m_train_paras.col(id),file);
+        }
+    }
+}
+
+void train::read_trained_model(const std::string &root, int casscade_num)
+{
+    m_casscade_sum = casscade_num;
+    m_para_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
+    m_para_bs.resize(m_casscade_sum, Eigen::VectorXf());
+    m_shape_exp_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
+    for(int i=0;i<casscade_num;i++)
+    {
+        read_para_result(root,i);
+        read_shape_exp_result(root,i);
     }
 }
 
@@ -129,6 +184,7 @@ void train::save_para_result(int casscade_level)
     num.setNum(casscade_level);
     std::string name=m_savemodel_root+"para_Rs_"+num.toStdString()+".bin";
     FILE *file = fopen(name.data(),"wb");
+    LOG_IF(FATAL,!file)<<"save_para_result "<<name<<" file open failed";
     //save b with R
     int R_col = Face::get_keypoints_size()*m_feature_size+1;
     int R_row = m_para_num;
@@ -145,6 +201,7 @@ void train::save_shape_exp_result(int casscade_level)
     num.setNum(casscade_level);
     std::string name = m_savemodel_root+"shape_exp_Rs_"+num.toStdString()+".bin";
     FILE *file = fopen(name.data(),"wb");
+    LOG_IF(FATAL,!file)<<"save_shape_exp_result "<<name<<" file open failed";
     //save b with R
     int R_col = (m_feature_size*Face::get_keypoints_size()+1)*m_orien_choose.get_divide_num();
     int R_row = Face::get_shape_pcanum()+Face::get_exp_pcanum();
@@ -159,7 +216,7 @@ void train::set_feature_compute_gpu(const std::vector<int> ids)
     m_feature_detectors.clear();
     if(ids.size()!=m_threadnum_for_compute_features)
     {
-        std::cout<<"train::set_feature_compute_gpu ids size wrong"<<std::endl;
+        LOG(FATAL)<<"train::set_feature_compute_gpu ids size wrong";
         m_gpuid_for_feature_computes.resize(1,0);
         m_feature_detectors.push_back(CNNDenseFeature(0));
     }
@@ -167,7 +224,7 @@ void train::set_feature_compute_gpu(const std::vector<int> ids)
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
         m_feature_detectors.push_back(CNNDenseFeature(m_gpuid_for_feature_computes[i]));
-        std::cout<<"Net "<<i<<" has been build."<<std::endl;
+        LOG(INFO)<<"Net "<<i<<" has been build.";
     }
 }
 
@@ -179,15 +236,11 @@ void train::initial_shape_exp_with_mean()
 
 void train::initial_para()
 {
-    std::vector<float> paras;
-    io_utils::read_all_type_file_to_vector<float>("../resource/mean_para_file.txt", paras);
-    Eigen::VectorXf temp(6);
-    temp(0)=paras[5];
-    temp(1)=-paras[0];  temp(2)=-paras[1];  temp(3)=-paras[2];
-    temp(4)=paras[3];
-    temp(5)=paras[4];
+//    std::vector<float> paras;
+//    io_utils::read_all_type_file_to_vector<float>("../resource/mean_para_file.txt", paras);
+//    Eigen::VectorXf temp(6);
     for(int i=0; i<m_all_img_num; i++)
-        m_train_paras.col(i) = temp;
+        m_train_paras.col(i) = m_groundtruth_paras_mean;
 }
 
 void train::compute_para_mean_sd()
@@ -212,6 +265,35 @@ void train::compute_para_mean_sd()
     temp = temp.colwise()-m_groundtruth_paras_mean;
     temp /= sqrt(float(m_all_img_num-1));
     m_groundtruth_paras_sd=temp.rowwise().norm();
+}
+
+void train::read_para_mean_sd()
+{
+    std::vector<float> vals;
+    io_utils::read_all_type_from_bin<float>(m_para_mean_sd_file,2*m_para_num,vals);
+    m_groundtruth_paras_sd.resize(m_para_num);
+    m_groundtruth_paras_mean.resize(m_para_num);
+    Eigen::VectorXf temp(m_para_num);
+    memcpy(temp.data(),vals.data(),m_para_num*sizeof(float));
+    //chengxu li de para sunxu yu wenjian li de bu yi yang, duqu shi gai cheng yi zhi
+    m_groundtruth_paras_mean(0) = temp(5);
+    m_groundtruth_paras_mean(1)=-temp[0];  m_groundtruth_paras_mean(2)=-temp[1];  m_groundtruth_paras_mean(3)=-temp[2];
+    m_groundtruth_paras_mean(4)=temp[3];
+    m_groundtruth_paras_mean(5)=temp[4];
+    memcpy(temp.data(),vals.data()+m_para_num,m_para_num*sizeof(float));
+    //chengxu li de para sunxu yu wenjian li de bu yi yang, duqu shi gai cheng yi zhi
+    m_groundtruth_paras_sd(0) = temp(5);
+    m_groundtruth_paras_sd(1)=-temp[0];  m_groundtruth_paras_sd(2)=-temp[1];  m_groundtruth_paras_sd(3)=-temp[2];
+    m_groundtruth_paras_sd(4)=temp[3];
+    m_groundtruth_paras_sd(5)=temp[4];
+}
+
+void train::save_para_mean_sd()
+{
+    std::vector<float> vals(2*m_para_num, 0);
+    memcpy(vals.data(),m_groundtruth_paras_mean.data(),m_para_num*sizeof(float));
+    memcpy(vals.data()+m_para_num,m_groundtruth_paras_sd.data(),m_para_num*sizeof(float));
+    io_utils::write_all_type_to_bin<float>(vals,"../resource/para_mean_sd.bin");
 }
 
 void train::compute_shapes_exps_mean_sd()
@@ -268,6 +350,7 @@ void train::compute_all_visible_features_multi_thread()
 {
     Eigen::VectorXi nums(m_threadnum_for_compute_features);
     nums.setZero();
+    LOG(INFO)<<"start compute visible features";
     #pragma omp parallel for num_threads(m_threadnum_for_compute_features)
     for(int i=0;i<m_face_imgs_pointer.size();i++)
     {
@@ -281,9 +364,9 @@ void train::compute_all_visible_features_multi_thread()
 
         compute_per_face_imgs_visiblefeatures_multi_thread(m_face_imgs_pointer[i],i,m_before_imgsize[i],thread_id);
         nums[thread_id]=nums[thread_id]+1;
-        if(nums.sum()%500==0)
-            std::cout<<"face img features have been computed a 500"<<std::endl;
+        LOG_IF(INFO,nums.sum()%500==0)<<"face img features have been computed a 500";
     }
+    LOG(INFO)<<"done!";
 }
 
 void train::compute_per_face_imgs_visiblefeatures_multi_thread(face_imgs *iter, int index, int img_size, int thread_id)
@@ -368,7 +451,7 @@ void train::compute_keypoint_visible_multi_thread(const Eigen::MatrixXf &R, std:
 
 void train::compute_paras_R_b()
 {
-    float lamda = 500;
+    float lamda = 100;
     Eigen::MatrixXf delta_x;
     compute_delta_para(delta_x);
     //normalize paras
@@ -380,13 +463,12 @@ void train::compute_paras_R_b()
     Eigen::MatrixXf lhs(R_col,R_col);
     Eigen::MatrixXf rhs(R_col,m_para_num);
 
-    std::cout<<"start rankUpdate..."<<std::endl;
 //    lhs.block(0,0,R_col-1,R_col-1).selfadjointView<Eigen::Upper>().rankUpdate(m_visible_features,1.0);
     //using gpu to compute rankUpdate
     Eigen::MatrixXf rankTemp;
     my_gpu_rankUpdated(rankTemp,m_visible_features,1.0,m_gpuid_for_matrix_compute);
     lhs.block(0,0,R_col-1,R_col-1)=rankTemp;
-    std::cout<<"done"<<std::endl;
+
 
     lhs.block(0,R_col-1,R_col-1,1) = m_visible_features.rowwise().sum();
     lhs(R_col-1,R_col-1) = float(m_all_img_num);
@@ -397,7 +479,7 @@ void train::compute_paras_R_b()
     rhs.bottomRows(1) = delta_x.transpose().colwise().sum();
 
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
-    std::cout<<"casscade para "<<m_casscade_level<<" compute for A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" compute for A("<<lhs.rows()<<"*"<<lhs.cols()<<")...";
 //using Dense decompose
     Eigen::MatrixXf temp = lhs.ldlt().solve(rhs);
 //    //using ConjugateGradient method
@@ -405,21 +487,17 @@ void train::compute_paras_R_b()
 //    cg.compute(lhs);
 //    Eigen::MatrixXf temp=cg.solve(rhs);
 
-    if(check_matrix_invalid(temp))
-    {
-        std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
-        exit(1);
-    }
+    LOG_IF(FATAL,check_matrix_invalid(temp))<<"computation become invalid! fatal wrong!";
     Eigen::MatrixXf result = temp.transpose();
-    std::cout<<"done! "<<std::endl;    
+    LOG(INFO)<<"done! ";
     Eigen::MatrixXf &R = m_para_Rs[m_casscade_level];
     R.resize(m_para_num,m_feature_size*Face::get_keypoints_size());
     memcpy(R.data(),result.data(), sizeof(float)*R.size());
     Eigen::VectorXf &b = m_para_bs[m_casscade_level];
     b.resize(m_para_num);
     b = result.col(R_col-1);
-    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<result.norm()<<"; sqrt energy is "<<(lhs*result.transpose()-rhs).norm()<<
-        " delta norm: "<<(((m_para_Rs[m_casscade_level]*m_visible_features).colwise()+m_para_bs[m_casscade_level])-delta_x).colwise().norm().mean()<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<result.norm()<<"; sqrt energy is "<<(lhs*result.transpose()-rhs).norm()<<
+        " delta norm: "<<(((m_para_Rs[m_casscade_level]*m_visible_features).colwise()+m_para_bs[m_casscade_level])-delta_x).colwise().norm().mean();
 }
 
 void train::update_para()
@@ -440,21 +518,21 @@ void train::show_delta_para_info()
     Eigen::MatrixXf delta_r = delta_para.block(1,0,3,m_all_img_num);
     Eigen::MatrixXf delta_t = delta_para.block(4,0,2,m_all_img_num);
     Eigen::MatrixXf delta_norm = delta_s.colwise().norm();
-    std::cout<<"casscade para "<<m_casscade_level<<" scale with ground truth norm: mean: "<<delta_norm.mean()
-            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff()<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" scale with ground truth norm: mean: "<<delta_norm.mean()
+            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff();
     delta_norm = (delta_r.row(0)).colwise().norm();
-    std::cout<<"casscade para "<<m_casscade_level<<" ax with ground truth norm: mean: "<<delta_norm.mean()
-            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff()<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" ax with ground truth norm: mean: "<<delta_norm.mean()
+            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff();
     delta_norm = (delta_r.row(1)).colwise().norm();
-    std::cout<<"casscade para "<<m_casscade_level<<" ay with ground truth norm: mean: "<<delta_norm.mean()
-            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff()<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" ay with ground truth norm: mean: "<<delta_norm.mean()
+            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff();
     delta_norm = (delta_r.row(2)).colwise().norm();
-    std::cout<<"casscade para "<<m_casscade_level<<" az with ground truth norm: mean: "<<delta_norm.mean()
-            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff()<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" az with ground truth norm: mean: "<<delta_norm.mean()
+            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff();
 
     delta_norm = delta_t.colwise().norm();
-    std::cout<<"casscade para "<<m_casscade_level<<" t with ground truth norm: mean: "<<delta_norm.mean()
-            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff()<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" t with ground truth norm: mean: "<<delta_norm.mean()
+            <<" max: "<<delta_norm.maxCoeff()<<" min: "<<delta_norm.minCoeff();
 }
 
 void train::compute_regular_feature_from_multi_imgs(int before_img_size,const std::vector<int> &choose_imgs_ids, MatrixXf &regu_features)
@@ -492,9 +570,43 @@ void train::compute_regular_feature_from_multi_imgs(int before_img_size,const st
     }
 }
 
+void train::compute_regular_features(int randomnum)
+{
+    m_regu_features.resize((m_feature_size*Face::get_keypoints_size()+1)*m_orien_choose.get_divide_num()
+                           ,m_face_img_num*(1+randomnum));
+
+    std::list<face_imgs>::iterator iter = m_face_imgs.begin();
+    int before_img_size=0;
+    int index=0;
+    std::vector<int> choose_ids;
+    Eigen::MatrixXf regu_features;
+    for(; iter!=m_face_imgs.end(); iter++)
+    {
+        //first face img's all img to train
+        choose_ids.clear();
+        for(int i=0;i<iter->img_size();i++)
+            choose_ids.push_back(i);
+        compute_regular_feature_from_multi_imgs(before_img_size,choose_ids,regu_features);
+        m_regu_features.col((1+randomnum)*index) = regu_features;
+        //is per face_img add other random choose img to  train
+        if(randomnum>0)
+        {
+            for(int i=0;i<randomnum;i++)
+            {
+                int random_num=m_random_tool.random_choose_num_from_1_to_size(iter->img_size());
+                m_random_tool.random_choose_n_different_id_from_0_to_size(random_num,iter->img_size()-1,choose_ids);
+                compute_regular_feature_from_multi_imgs(before_img_size,choose_ids,regu_features);
+                m_regu_features.col((1+randomnum)*index+i+1) = regu_features;
+            }
+        }
+        before_img_size+=iter->img_size();
+        index++;
+    }
+}
+
 void train::compute_shapes_exps_R_b()
 {
-    float lamda = 100;
+    float lamda = 20;
     Eigen::MatrixXf delta_x;
     compute_delta_shape_exp(delta_x);
     //normalize paras
@@ -505,47 +617,15 @@ void train::compute_shapes_exps_R_b()
         expand_delta_x = delta_x;
     else
         expand_delta_x_with_num(per_face_img_random_train_data_num, delta_x, expand_delta_x);
-    m_regu_features.resize((m_feature_size*Face::get_keypoints_size()+1)*m_orien_choose.get_divide_num()
-                           ,m_face_img_num*(1+per_face_img_random_train_data_num));
-
-    std::list<face_imgs>::iterator iter = m_face_imgs.begin();
-    int before_img_size=0;
-    int index=0;
-    std::vector<int> choose_ids;
-    Eigen::MatrixXf regu_features;
-    for(; iter!=m_face_imgs.end(); iter++)
-    {
-        //first face img's all img to train
-		choose_ids.clear();
-        for(int i=0;i<iter->img_size();i++)
-            choose_ids.push_back(i);
-        compute_regular_feature_from_multi_imgs(before_img_size,choose_ids,regu_features);
-        m_regu_features.col((1+per_face_img_random_train_data_num)*index) = regu_features;
-        //is per face_img add other random choose img to  train
-        if(per_face_img_random_train_data_num>0)
-        {
-            for(int i=0;i<per_face_img_random_train_data_num;i++)
-            {
-                int random_num=m_random_tool.random_choose_num_from_1_to_size(iter->img_size());
-                m_random_tool.random_choose_n_different_id_from_0_to_size(random_num,iter->img_size()-1,choose_ids);
-                compute_regular_feature_from_multi_imgs(before_img_size,choose_ids,regu_features);
-                m_regu_features.col((1+per_face_img_random_train_data_num)*index+i+1) = regu_features;
-            }
-        }
-        before_img_size+=iter->img_size();
-        index++;
-    }
+    compute_regular_features(per_face_img_random_train_data_num);
     //combine R and b to solve, new_R=(R|b)
-//    const int R_row = m_para_num;
     const int R_col = m_regu_features.rows();
     Eigen::MatrixXf lhs(R_col,R_col);
     Eigen::MatrixXf rhs(R_col,expand_delta_x.cols());
 
-    std::cout<<"start rankUpdate..."<<std::endl;
 //    lhs.selfadjointView<Eigen::Upper>().rankUpdate(m_regu_features,1.0);
     //using gpu to compute rankUpdate
     my_gpu_rankUpdated(lhs,m_regu_features,1.0,m_gpuid_for_matrix_compute);
-    std::cout<<"done"<<std::endl;
 
     //add regular
     lhs+=(lamda*Eigen::VectorXf(R_col).setOnes()).asDiagonal();
@@ -553,7 +633,7 @@ void train::compute_shapes_exps_R_b()
     rhs = m_regu_features*expand_delta_x.transpose();
 
     lhs.triangularView<Eigen::Lower>() = lhs.transpose();
-    std::cout<<"casscade para "<<m_casscade_level<<" compute for pca para A("<<lhs.rows()<<"*"<<lhs.cols()<<")..."<<std::endl;
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" compute for pca para A("<<lhs.rows()<<"*"<<lhs.cols()<<")...";
 
 //    io_utils::write_all_type_to_bin<float>(lhs.data(),"lhs_matrix.bin",lhs.size(),true);
 //    io_utils::write_all_type_to_bin<float>(rhs.data(),"rhs_matrix.bin",rhs.size(),true);
@@ -566,22 +646,19 @@ void train::compute_shapes_exps_R_b()
 //    cg.compute(lhs);
 //    Eigen::MatrixXf temp=cg.solve(rhs);
 
-    if(check_matrix_invalid(temp))
-    {
-        std::cout<<"computation become invalid! fatal wrong!"<<std::endl;
-        exit(1);
-    }
+    LOG_IF(FATAL,check_matrix_invalid(temp))<<"computation become invalid! fatal wrong!";
+
     m_shape_exp_Rs[m_casscade_level]=temp.transpose();
-    std::cout<<"done! "<<std::endl;
-    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<m_shape_exp_Rs[m_casscade_level].norm()<<"; sqrt energy is "<<(lhs*temp-rhs).norm()<<
-            " delta norm: "<<(m_shape_exp_Rs[m_casscade_level]*m_regu_features-expand_delta_x).colwise().norm().mean()<<std::endl;
+    LOG(INFO)<<"done! ";
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<m_shape_exp_Rs[m_casscade_level].norm()<<"; sqrt energy is "<<(lhs*temp-rhs).norm()<<
+            " delta norm: "<<(m_shape_exp_Rs[m_casscade_level]*m_regu_features-expand_delta_x).colwise().norm().mean();
 }
 
-void train::update_shape_exp()
+void train::update_shape_exp(int num)
 {
     Eigen::MatrixXf expand_delta_x,delta_x;
     expand_delta_x = m_shape_exp_Rs[m_casscade_level]*m_regu_features;
-    depand_delta_x_with_num(per_face_img_random_train_data_num,expand_delta_x,delta_x);
+    depand_delta_x_with_num(num,expand_delta_x,delta_x);
     //unnormalize paras
     delta_x = m_groundtruth_shapes_exps_sd.asDiagonal()*delta_x;
 
@@ -593,12 +670,28 @@ void train::show_delta_shape_exp_info()
 {
     Eigen::MatrixXf delta_para;
     compute_delta_shape_exp(delta_para);
-    Eigen::MatrixXf delta_shape_norm = delta_para.block(0,0,Face::get_shape_pcanum(),m_face_img_num).colwise().norm();
-    Eigen::MatrixXf delta_exp_norm = delta_para.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),m_face_img_num).colwise().norm();
-    std::cout<<"casscade para "<<m_casscade_level<<" shape with ground truth norm: mean: "<<delta_shape_norm.mean()
-            <<" max: "<<delta_shape_norm.maxCoeff()<<" min: "<<delta_shape_norm.minCoeff()<<std::endl;
-    std::cout<<"casscade para "<<m_casscade_level<<" exp with ground truth norm: mean: "<<delta_exp_norm.mean()
-            <<" max: "<<delta_exp_norm.maxCoeff()<<" min: "<<delta_exp_norm.minCoeff()<<std::endl;
+    Eigen::MatrixXf delta_shape = delta_para.block(0,0,Face::get_shape_pcanum(),m_face_img_num);
+    Eigen::MatrixXf delta_exp = delta_para.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),m_face_img_num);
+    Eigen::MatrixXf norm;
+    norm = (delta_shape.row(0)).colwise().norm();
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" shape 0 with ground truth norm: mean: "<<norm.mean()
+            <<" max: "<<norm.maxCoeff()<<" min: "<<norm.minCoeff();
+    norm = (delta_shape.row(1)).colwise().norm();
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" shape 1 with ground truth norm: mean: "<<norm.mean()
+            <<" max: "<<norm.maxCoeff()<<" min: "<<norm.minCoeff();
+    norm = (delta_shape.row(2)).colwise().norm();
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" shape 2 with ground truth norm: mean: "<<norm.mean()
+            <<" max: "<<norm.maxCoeff()<<" min: "<<norm.minCoeff();
+
+    norm = (delta_exp.row(0)).colwise().norm();
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" exp 0 with ground truth norm: mean: "<<norm.mean()
+            <<" max: "<<norm.maxCoeff()<<" min: "<<norm.minCoeff();
+    norm = (delta_exp.row(1)).colwise().norm();
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" exp 1 with ground truth norm: mean: "<<norm.mean()
+            <<" max: "<<norm.maxCoeff()<<" min: "<<norm.minCoeff();
+    norm = (delta_exp.row(2)).colwise().norm();
+    LOG(INFO)<<"casscade para "<<m_casscade_level<<" exp 2 with ground truth norm: mean: "<<norm.mean()
+            <<" max: "<<norm.maxCoeff()<<" min: "<<norm.minCoeff();
 }
 
 void train::expand_delta_x_with_num(int num, const MatrixXf &delta_x, MatrixXf &expand_delta_x)
@@ -632,13 +725,43 @@ bool train::check_matrix_invalid(const MatrixXf &matrix)
     return false;
 }
 
+void train::read_para_result(const std::string &readmodel_root,int casscade_level)
+{
+    QString num;
+    num.setNum(casscade_level);
+    std::string name=readmodel_root+"para_Rs_"+num.toStdString()+".bin";
+    FILE *file = fopen(name.data(),"rb");
+    LOG_IF(FATAL,!file)<<"read_para_result "<<name<<" file open failed";
+    //read b with R
+    int R_col;
+    int R_row;
+    fread(&R_row,sizeof(int),1,file);
+    fread(&R_col,sizeof(int),1,file);
+    fread(m_para_Rs[casscade_level].data(),sizeof(float),(R_col-1)*R_row,file);
+    fread(m_para_bs[casscade_level].data(),sizeof(float),R_row,file);
+    fclose(file);
+}
+
+void train::read_shape_exp_result(const std::string &readmodel_root, int casscade_level)
+{
+    QString num;
+    num.setNum(casscade_level);
+    std::string name = readmodel_root+"shape_exp_Rs_"+num.toStdString()+".bin";
+    FILE *file = fopen(name.data(),"rb");
+    LOG_IF(FATAL,!file)<<"read_shape_exp_result "<<name<<" file open failed";
+    //read b with R
+    int R_col;
+    int R_row;
+    fread(&R_row,sizeof(int),1,file);
+    fread(&R_col,sizeof(int),1,file);
+    fread(m_shape_exp_Rs[casscade_level].data(),sizeof(float),R_col*R_row,file);
+    fclose(file);
+}
+
 void train::my_gpu_rankUpdated(MatrixXf &C, const MatrixXf &A, float a, int gpu_id)
 {
-    if(A.size()==0)
-    {
-        std::cout<<"train::my_gpu_rankUpdated input matrix are empty!"<<std::endl;
-        exit(1);
-    }
+    LOG(INFO)<<"start rankUpdate...";
+    LOG_IF(FATAL, A.size()==0)<<"train::my_gpu_rankUpdated input matrix are empty!";
     void *C_data;
     void *A_data;
     int C_size=A.rows()*A.rows()*sizeof(float);
@@ -664,4 +787,5 @@ void train::my_gpu_rankUpdated(MatrixXf &C, const MatrixXf &A, float a, int gpu_
     CUDA_CHECK(cudaFree(C_data));
     CUDA_CHECK(cudaFree(A_data));
     CaffeFreeHost(temp_cpu_C_data,cpu_malloc_use_cuda);
+    LOG(INFO)<<"done";
 }

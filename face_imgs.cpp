@@ -3,6 +3,8 @@
 #include <opencv/cv.h>
 #include <opencv2/highgui/highgui.hpp>
 #include "io_utils.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 face_imgs::face_imgs(const std::string &root, const std::string &meshparas_name,int shape_dim, int exp_dim)
 {
     QString temp(meshparas_name.data());
@@ -32,8 +34,8 @@ void face_imgs::read_imgs()
         tmp.convertTo(tmp,CV_32F,1.0);
         if(tmp.rows!=m_img_length||tmp.cols!=m_img_length)
         {
-			std::cout<<"face_imgs::read_imgs read img"<<imgname<<" size is wrong!"<<std::endl;			
-            exit(1);
+            LOG(FATAL)<<"face_imgs::read_imgs read img"<<imgname<<" size is wrong!";
+            return;
         }
         std::vector<float> img;
         img.resize(m_img_length*m_img_length,0.0);
@@ -85,8 +87,8 @@ void face_imgs::read_shape_exp()
     io_utils::read_all_type_rowsfile_to_2vector<float>(m_files_root+m_face_name+"_mesh_para.txt", paras);
     if(m_shape_dimension>paras[0].size()||m_exp_dimension>paras[1].size())
     {
-        std::cout<<"face_imgs::read_shape_exp vector dimention is wrong!"<<std::endl;
-        exit(1);
+        LOG(FATAL)<<"face_imgs::read_shape_exp vector dimention is wrong!";
+        return;
     }
     memcpy(m_groundtruth_shapes.data(),paras[0].data(),m_shape_dimension*sizeof(float));
     memcpy(m_groundtruth_exps.data(),paras[1].data(),m_exp_dimension*sizeof(float));

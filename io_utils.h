@@ -22,6 +22,15 @@ void write_all_type_to_file(const vector<T> &ids, const string &file)
         out<<ids[i]<<endl;
     out.close();
 }
+template<typename T>
+void write_all_type_to_file(const Eigen::Matrix< T , Eigen::Dynamic , Eigen::Dynamic> &ids, const string &file)
+{
+    ofstream out(file);
+    const T* data = ids.data();
+    for(int i=0; i<ids.size(); i++)
+        out<<data[i]<<endl;
+    out.close();
+}
 
 template<typename T>    //this write method is most roboust, can ref read_all_type_rowsfile_to_2vector's notes
 void read_all_type_file_to_vector(const string &file, vector<T> &ids)

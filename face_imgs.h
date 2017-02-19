@@ -19,6 +19,8 @@ public:
     const Eigen::VectorXf& get_groundtruth_shapes(){return m_groundtruth_shapes;}
     const Eigen::VectorXf& get_groundtruth_exps(){return m_groundtruth_exps;}
     const std::vector<float>& get_img(int id){return m_imgs_data[id];}
+    const std::string& get_face_name(){return m_face_name;}
+    const std::vector<std::string>& get_imgfiles_name(){return m_imgfiles_name;}
 private:
     void initial();
     void resize_data();

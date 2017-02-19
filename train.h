@@ -13,11 +13,12 @@ class train
 public:
     train(int thread_num);
     ~train(){}
-    void read_train_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist);
+    void read_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist);
     void train_model();
-    void save_para_result(int casscade_level);
-    void save_shape_exp_result(int casscade_level);
-    void set_train_data_root(const std::string &root){m_traindata_root=root;}
+    void verify_model();
+    void save_verify_result(const std::string& root);
+    void read_trained_model(const std::string &root, int casscade_num);
+    void set_data_root(const std::string &root){m_data_root=root;}
     void set_save_model_root(const std::string &root){m_savemodel_root=root;}
     void set_feature_compute_gpu(const std::vector<int> ids);
     void set_matrix_compute_gpu(int id){m_gpuid_for_matrix_compute=id;}
@@ -29,6 +30,8 @@ private:
     void initial_shape_exp_with_mean();
     void initial_para();
     void compute_para_mean_sd();
+    void read_para_mean_sd();
+    void save_para_mean_sd();
     void compute_shapes_exps_mean_sd();
     //compute groundtruth para substract train para
     void compute_delta_para(Eigen::MatrixXf &delta_para);
@@ -43,8 +46,9 @@ private:
     void show_delta_para_info();
 
     void compute_regular_feature_from_multi_imgs(int before_img_size, const std::vector<int> &choose_imgs_ids, MatrixXf &regu_features);
+    void compute_regular_features(int randomnum);
     void compute_shapes_exps_R_b();
-    void update_shape_exp();
+    void update_shape_exp(int num);
     void show_delta_shape_exp_info();
 
     void expand_delta_x_with_num(int num, const Eigen::MatrixXf &delta_x, Eigen::MatrixXf &expand_delta_x);
@@ -52,6 +56,10 @@ private:
 
     bool check_matrix_invalid(const Eigen::MatrixXf &matrix);
 
+    void read_para_result(const std::string &readmodel_root, int casscade_level);
+    void read_shape_exp_result(const std::string &readmodel_root,int casscade_level);
+    void save_para_result(int casscade_level);
+    void save_shape_exp_result(int casscade_level);
 
 private:
     //using list to allocate non continus memory, when data is large, which is more safe
@@ -76,8 +84,9 @@ private:
 
 #endif
     std::vector<part_3DMM_face>  m_3dmm_meshs;
-    std::string m_traindata_root;
+    std::string m_data_root;
     std::string m_savemodel_root;
+    std::string m_para_mean_sd_file;
     divide_orientation_space m_orien_choose;
     random_tool m_random_tool;
 

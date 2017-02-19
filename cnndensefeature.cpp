@@ -34,7 +34,7 @@ void CNNDenseFeature::set_data(const std::vector<float> &data)
 {
     if(data.size()!=img_size)
     {
-        std::cout<<"CNNDenseFeature::set_data data size is wrong!"<<std::endl;
+        LOG(FATAL)<<"CNNDenseFeature::set_data data size is wrong!";
         return;
     }
     BlobProto blob_proto;
@@ -72,7 +72,7 @@ void CNNDenseFeature::get_compute_visible_posfeatures(const Eigen::MatrixXf &pos
     visible_features.resize(f_dimension*visible.size());
     if(pos.cols()!=visible.size())
     {
-        std::cout<<"CNNDenseFeature::get_compute_visible_posfeatures pos visible size is wrong!"<<std::endl;
+        LOG(FATAL)<<"CNNDenseFeature::get_compute_visible_posfeatures pos visible size is wrong!";
         visible_features.setZero();
         return;
     }
@@ -103,7 +103,7 @@ void CNNDenseFeature::feature_compute()
     const std::vector<Blob<float>*>& result=feature_net->Forward(&loss);
     if(result[0]->count()!=features.size())
     {
-        std::cout<<"CNNDenseFeature::feature_compute result feature size is wrong!"<<std::endl;
+        LOG(FATAL)<<"CNNDenseFeature::feature_compute result feature size is wrong!";
         return;
     }
     caffe_copy<float>(features.size(),result[0]->cpu_data(), features.data());
