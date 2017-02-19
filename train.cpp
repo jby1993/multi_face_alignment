@@ -86,7 +86,7 @@ void train::train_model()
     initial_para();
     m_casscade_level=-1;
     show_delta_para_info();
-
+    show_delta_shape_exp_info();
     m_para_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
     m_para_bs.resize(m_casscade_sum, Eigen::VectorXf());
 
@@ -411,14 +411,15 @@ void train::compute_paras_R_b()
         exit(1);
     }
     Eigen::MatrixXf result = temp.transpose();
-    std::cout<<"done! "<<std::endl;
-    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<result.norm()<<"; sqrt energy is "<<(lhs*result.transpose()-rhs).norm()<<std::endl;
+    std::cout<<"done! "<<std::endl;    
     Eigen::MatrixXf &R = m_para_Rs[m_casscade_level];
     R.resize(m_para_num,m_feature_size*Face::get_keypoints_size());
     memcpy(R.data(),result.data(), sizeof(float)*R.size());
     Eigen::VectorXf &b = m_para_bs[m_casscade_level];
     b.resize(m_para_num);
     b = result.col(R_col-1);
+    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<result.norm()<<"; sqrt energy is "<<(lhs*result.transpose()-rhs).norm()<<
+        " delta norm: "<<(((m_para_Rs[m_casscade_level]*m_visible_features).colwise()+m_para_bs[m_casscade_level])-delta_x).colwise().norm().mean()<<std::endl;
 }
 
 void train::update_para()
@@ -493,7 +494,7 @@ void train::compute_regular_feature_from_multi_imgs(int before_img_size,const st
 
 void train::compute_shapes_exps_R_b()
 {
-    float lamda = 500;
+    float lamda = 100;
     Eigen::MatrixXf delta_x;
     compute_delta_shape_exp(delta_x);
     //normalize paras
@@ -572,7 +573,8 @@ void train::compute_shapes_exps_R_b()
     }
     m_shape_exp_Rs[m_casscade_level]=temp.transpose();
     std::cout<<"done! "<<std::endl;
-    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<m_shape_exp_Rs[m_casscade_level].norm()<<"; sqrt energy is "<<(lhs*temp-rhs).norm()<<std::endl;
+    std::cout<<"casscade para "<<m_casscade_level<<" result norm: "<<m_shape_exp_Rs[m_casscade_level].norm()<<"; sqrt energy is "<<(lhs*temp-rhs).norm()<<
+            " delta norm: "<<(m_shape_exp_Rs[m_casscade_level]*m_regu_features-expand_delta_x).colwise().norm().mean()<<std::endl;
 }
 
 void train::update_shape_exp()
