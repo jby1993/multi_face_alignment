@@ -737,6 +737,8 @@ void train::read_para_result(const std::string &readmodel_root,int casscade_leve
     int R_row;
     fread(&R_row,sizeof(int),1,file);
     fread(&R_col,sizeof(int),1,file);
+    m_para_Rs[casscade_level].resize(R_row,R_col-1);
+    m_para_bs[casscade_level].resize(R_row,1);
     fread(m_para_Rs[casscade_level].data(),sizeof(float),(R_col-1)*R_row,file);
     fread(m_para_bs[casscade_level].data(),sizeof(float),R_row,file);
     fclose(file);
@@ -754,6 +756,7 @@ void train::read_shape_exp_result(const std::string &readmodel_root, int casscad
     int R_row;
     fread(&R_row,sizeof(int),1,file);
     fread(&R_col,sizeof(int),1,file);
+    m_shape_exp_Rs[casscade_level].resize(R_row,R_col);
     fread(m_shape_exp_Rs[casscade_level].data(),sizeof(float),R_col*R_row,file);
     fclose(file);
 }

@@ -17,7 +17,7 @@ void partfid2wholef2anotherpartfid(const string &pf2wf_file, const string &wf2op
 template<typename T>
 void write_all_type_to_file(const vector<T> &ids, const string &file)
 {
-    ofstream out(file);
+    ofstream out(file.data());
     for(int i=0; i<ids.size(); i++)
         out<<ids[i]<<endl;
     out.close();
@@ -25,7 +25,7 @@ void write_all_type_to_file(const vector<T> &ids, const string &file)
 template<typename T>
 void write_all_type_to_file(const Eigen::Matrix< T , Eigen::Dynamic , Eigen::Dynamic> &ids, const string &file)
 {
-    ofstream out(file);
+    ofstream out(file.data());
     const T* data = ids.data();
     for(int i=0; i<ids.size(); i++)
         out<<data[i]<<endl;
