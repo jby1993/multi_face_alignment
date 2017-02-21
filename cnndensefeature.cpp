@@ -107,6 +107,7 @@ void CNNDenseFeature::feature_compute()
         return;
     }
     caffe_copy<float>(features.size(),result[0]->cpu_data(), features.data());
+    is_updated=true;
 }
 
 void CNNDenseFeature::construct_net(std::string model, std::string weights)
