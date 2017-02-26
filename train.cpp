@@ -371,6 +371,8 @@ void train::compute_all_visible_features_multi_thread()
 
 void train::compute_per_face_imgs_visiblefeatures_multi_thread(face_imgs *iter, int index, int img_size, int thread_id)
 {
+    m_3dmm_meshs[thread_id].set_shape(m_train_shapes.col(index));
+    m_3dmm_meshs[thread_id].set_exp(m_train_exps.col(index));
     for(int i=0;i<iter->img_size();i++)
     {
         int col = img_size+i;
@@ -384,11 +386,6 @@ void train::compute_per_face_imgs_visiblefeatures_multi_thread(face_imgs *iter, 
                           Eigen::AngleAxisf(ay, Eigen::Vector3f::UnitY()) *
                           Eigen::AngleAxisf(az, Eigen::Vector3f::UnitZ());
         Eigen::Matrix3f R = transformation.rotation();
-//        m_3dmm_mesh.set_shape(iter->get_groundtruth_shapes());
-//        m_3dmm_mesh.set_exp(iter->get_groundtruth_exps());
-        m_3dmm_meshs[thread_id].set_shape(m_train_shapes.col(index));
-        m_3dmm_meshs[thread_id].set_exp(m_train_exps.col(index));
-//        m_3dmm_mesh.update_mesh(false);
         Eigen::MatrixXf temp_v;
         m_3dmm_meshs[thread_id].get_vertex_matrix(temp_v,false);
         temp_v  = R*temp_v;

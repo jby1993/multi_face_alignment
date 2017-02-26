@@ -3,6 +3,7 @@
 #include <opencv/cv.h>
 #include <opencv2/highgui/highgui.hpp>
 #include "train.h"
+#include "train2.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "boost/algorithm/string.hpp"
@@ -86,7 +87,7 @@ void read_feature_gpu_ids(std::vector<int> &gpus)
     }
 }
 
-void call_meodule(train *compute)
+void call_meodule(train2 *compute)
 {
     if (FLAGS_phase == "")
         LOG(FATAL)<<"phase must be \"TRAIN\" or \"VERIFY\"";
@@ -132,7 +133,7 @@ int main(int argc, char *argv[])
     for(int i=0;i<FLAGS_feature_threadnum;i++)
         LOG(INFO)<<feature_compute_gpus[i]<<",";
 
-    train my_train(thread_num);
+    train2 my_train(thread_num);
     my_train.set_feature_compute_gpu(feature_compute_gpus);
     my_train.set_matrix_compute_gpu(FLAGS_matrix_compute_gpu);
     my_train.set_data_root(FLAGS_data_root);

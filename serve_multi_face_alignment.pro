@@ -6,7 +6,7 @@ CONFIG += c++11
 TARGET = multi_face_alignment
 CONFIG += console
 CONFIG -= app_bundle
-
+DEFINES += USE_CNNFEATURE
 TEMPLATE = app
 
 QMAKE_CXXFLAGS += -fopenmp
