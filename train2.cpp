@@ -104,17 +104,59 @@ void train2::train_model()
 
 void train2::verify_model()
 {
+    initial_shape_exp_with_mean();
+    initial_para();
+    compute_keypos_visibility();
+    m_casscade_level=-1;
+    show_delta_keypos_info();
+    show_delta_para_info();
+    show_delta_shape_exp_info();
+    for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
+    {
+        compute_all_visible_features_multi_thread();
+        update_keypos_R();
+        show_delta_keypos_info();
+        update_para_R();
+        show_delta_para_info();
 
+        optimize_all_shape_exp();
+        show_delta_shape_exp_info();
+        compute_keypos_visibility();
+    }
 }
 
 void train2::save_verify_result(const std::string &root)
 {
-
+    for(int i=0;i<m_face_imgs_pointer.size();i++)
+    {
+        face_imgs *data = m_face_imgs_pointer[i];
+        std::string file=root+data->get_face_name()+"_mesh_para.txt";
+        Eigen::VectorXf temp(Face::get_shape_pcanum()+Face::get_exp_pcanum());
+        temp.block(0,0,Face::get_shape_pcanum(),1) = m_train_shapes.col(i);
+        temp.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),1) = m_train_exps.col(i);
+        io_utils::write_all_type_to_file<float>(temp,file);
+        const std::vector<std::string> &names=data->get_imgfiles_name();
+        for(int j=0;j<data->img_size();j++)
+        {
+            int id = m_before_imgsize[i]+j;
+            QString tname(names[j].data());
+            tname.remove(temp.size()-4,4);
+            file = root+tname.toStdString()+"_pose.txt";
+            io_utils::write_all_type_to_file<float>(m_train_paras.col(id),file);
+        }
+    }
 }
 
 void train2::read_trained_model(const std::string &root, int casscade_num)
 {
-
+    m_casscade_sum = casscade_num;
+    m_keypos_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
+    m_para_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
+    for(int i=0;i<casscade_num;i++)
+    {
+        read_keypos_R(root,i);
+        read_para_R(root,i);
+    }
 }
 
 void train2::set_feature_compute_gpu(const std::vector<int> ids)
@@ -562,6 +604,33 @@ void train2::optimize_all_shape_exp()
     LOG(INFO)<<"done.";
 }
 
+void train2::update_keypos_R()
+{
+    MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
+    f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
+    f.row(f.rows()-1).setOnes();
+    MatrixXf &R=m_keypos_Rs[m_casscade_level];
+    //update
+    m_train_keypos = m_train_keypos+R*f;
+}
+
+void train2::update_para_R()
+{
+    MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
+    f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
+    f.row(f.rows()-1).setOnes();
+    const MatrixXf &kR=m_keypos_Rs[m_casscade_level];
+    MatrixXf delta_U(kR.rows()+1, f.cols());
+    delta_U.block(0,0,kR.rows(),f.cols()) = kR*f;
+    delta_U.row(kR.rows()).setOnes();
+    MatrixXf &R = m_para_Rs[m_casscade_level];
+    //update
+    MatrixXf delta_para = R*delta_U;
+    //unnormalize paras
+    delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
+    m_train_paras = m_train_paras+delta_para;
+}
+
 void train2::compute_R(const MatrixXf &x, const MatrixXf &f, float lamda, MatrixXf &R)
 {
 //    //using jacobi to solve
@@ -580,11 +649,19 @@ void train2::compute_R(const MatrixXf &x, const MatrixXf &f, float lamda, Matrix
 
     //using ldlt to solve
     MatrixXf lhs(f.rows(),f.rows());
-    train::my_gpu_rankUpdated(lhs,f,1.0,m_gpuid_for_matrix_compute);
+    lhs.setZero();
+    int col_num = f.cols();
+    int cols = 20000;
+    int num = col_num/cols+1;
+    //this is for save GPU memory
+    for(int i=0;i<num-1;i++)
+        train::my_gpu_rankUpdated(lhs,f.block(0,i*cols,f.rows(),cols),1.0,m_gpuid_for_matrix_compute);
+    train::my_gpu_rankUpdated(lhs,f.block(0,(num-1)*cols,f.rows(),f.cols()-(num-1)*cols),1.0,m_gpuid_for_matrix_compute);
 //    lhs = f*f.transpose();
     lhs += (lamda*Eigen::VectorXf(f.rows()).setOnes()).asDiagonal();
     MatrixXf rhs(f.rows(),x.rows());
     rhs = f*x.transpose();
+    lhs.triangularView<Eigen::Lower>() = lhs.transpose();
     LOG(INFO)<<"solve Rt with ldlt:"<<" compute for lhs("<<lhs.rows()<<"*"<<lhs.cols()<<")...";
     MatrixXf temp = lhs.ldlt().solve(rhs);
 //    MatrixXf temp(lhs.cols(),rhs.cols());
@@ -616,4 +693,35 @@ bool train2::check_matrix_invalid(const MatrixXf &matrix)
         data++;
     }
     return false;
+}
+
+void train2::read_keypos_R(const std::string &readmodel_root, int casscade_level)
+{
+    QString num;
+    num.setNum(casscade_level);
+    std::string name = readmodel_root+"keypos_Rs_"+num.toStdString()+".bin";
+    MatrixXf &R=m_keypos_Rs[casscade_level];
+    read_R(R,name);
+}
+
+void train2::read_para_R(const std::string &readmodel_root, int casscade_level)
+{
+    QString num;
+    num.setNum(casscade_level);
+    std::string name = readmodel_root+"paras_Rs_"+num.toStdString()+".bin";
+    MatrixXf &R=m_para_Rs[casscade_level];
+    read_R(R,name);
+}
+
+void train2::read_R(MatrixXf &R, const std::string &file_name)
+{
+    FILE *file = fopen(file_name.data(),"rb");
+    LOG_IF(FATAL,!file)<<"train2::read_R: "<<file_name<<" file open failed";
+    int R_col;
+    int R_row;
+    fread(&R_row,sizeof(int),1,file);
+    fread(&R_col,sizeof(int),1,file);
+    R.resize(R_row,R_col);
+    fread(R.data(),sizeof(float),R.size(),file);
+    fclose(file);
 }

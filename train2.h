@@ -40,11 +40,16 @@ private:
     void save_paras_R(int casscade_level);
     void optimize_all_shape_exp();
 
+    void update_keypos_R();
+    void update_para_R();
 
     //solve ||x-Rf||^2+lamda*||R||
     void compute_R(const MatrixXf &x, const MatrixXf &f, float lamda, MatrixXf &R);
     void save_R(const MatrixXf &R, const std::string &file_name);
     bool check_matrix_invalid(const Eigen::MatrixXf &matrix);
+    void read_keypos_R(const std::string &readmodel_root, int casscade_level);
+    void read_para_R(const std::string &readmodel_root, int casscade_level);
+    void read_R(MatrixXf &R, const std::string &file_name);
 private:
     //using list to allocate non continus memory, when data is large, which is more safe
     std::list<face_imgs>    m_face_imgs;

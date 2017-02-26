@@ -463,6 +463,7 @@ void train::compute_paras_R_b()
 //    lhs.block(0,0,R_col-1,R_col-1).selfadjointView<Eigen::Upper>().rankUpdate(m_visible_features,1.0);
     //using gpu to compute rankUpdate
     Eigen::MatrixXf rankTemp;
+    rankTemp.setZero();
     my_gpu_rankUpdated(rankTemp,m_visible_features,1.0,m_gpuid_for_matrix_compute);
     lhs.block(0,0,R_col-1,R_col-1)=rankTemp;
 
@@ -622,6 +623,7 @@ void train::compute_shapes_exps_R_b()
 
 //    lhs.selfadjointView<Eigen::Upper>().rankUpdate(m_regu_features,1.0);
     //using gpu to compute rankUpdate
+    lhs.setZero();
     my_gpu_rankUpdated(lhs,m_regu_features,1.0,m_gpuid_for_matrix_compute);
 
     //add regular
@@ -762,6 +764,7 @@ void train::my_gpu_rankUpdated(MatrixXf &C, const MatrixXf &A, float a, int gpu_
 {
     LOG(INFO)<<"start rankUpdate...";
     LOG_IF(FATAL, A.size()==0)<<"train::my_gpu_rankUpdated input matrix are empty!";
+    LOG_IF(FATAL, C.rows()!=A.rows()||C.cols()!=A.rows())<<"train::my_gpu_rankUpdated input matrix C size is wrong!";
     void *C_data;
     void *A_data;
     int C_size=A.rows()*A.rows()*sizeof(float);
@@ -769,19 +772,19 @@ void train::my_gpu_rankUpdated(MatrixXf &C, const MatrixXf &A, float a, int gpu_
     Caffe::SetDevice(gpu_id);
     CUDA_CHECK(cudaGetDevice(&gpu_id));
     CUDA_CHECK(cudaMalloc(&C_data, C_size));
-    caffe_gpu_memset(C_size, 0, C_data);
+    caffe_gpu_memcpy(C_size, C.data(), C_data);
 
     CUDA_CHECK(cudaMalloc(&A_data, A_size));
     caffe_gpu_memcpy(A_size, A.data(), A_data);
 
-    gpu_rankUpdate((float*)C_data,(float*)A_data,A.rows(),A.cols(),a);
+    gpu_rankUpdate((float*)C_data,(float*)A_data,A.rows(),A.cols(),a,1.0);
 
     void *temp_cpu_C_data;
     bool cpu_malloc_use_cuda;
     CaffeMallocHost(&temp_cpu_C_data, C_size, &cpu_malloc_use_cuda);
     caffe_gpu_memcpy(C_size, C_data, temp_cpu_C_data);
 
-    C.resize(A.rows(),A.rows());
+//    C.resize(A.rows(),A.rows());
     memcpy(C.data(),temp_cpu_C_data,C_size);
 
     CUDA_CHECK(cudaFree(C_data));

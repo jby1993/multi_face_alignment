@@ -24,7 +24,7 @@ public:
     void set_matrix_compute_gpu(int id){m_gpuid_for_matrix_compute=id;}
     void set_feature_compute_thread_num(int num){m_threadnum_for_compute_features=num;}
 
-    //compute C=a*A*AT, C can not pre allocate
+    //compute C=a*A*AT+C, C must pre allocate
     static void my_gpu_rankUpdated(Eigen::MatrixXf &C, const Eigen::MatrixXf &A, float a, int gpu_id);
 private:
     void initial_shape_exp_with_mean();
