@@ -509,7 +509,7 @@ void train2::compute_update_para_R()
     MatrixXf &R = m_para_Rs[m_casscade_level];
 
     LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
-    compute_R(delta_para,delta_U,1.0,R);
+    compute_R(delta_para,delta_U,100.0,R);
     LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
         " delta mean norm: "<<(delta_para-R*delta_U).colwise().norm().mean();
     //update
