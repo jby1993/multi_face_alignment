@@ -17,6 +17,7 @@ SOURCES += serve_main.cpp \
     face_imgs.cpp \
     part_3dmm_face.cpp \
     train.cpp \
+    train2.cpp \
     divide_orientation_space.cpp \
     random_tool.cpp
 
@@ -27,6 +28,7 @@ HEADERS += \
     part_3dmm_face.h \
     tri_mesh.h \
     train.h \
+    train2.h \
     divide_orientation_space.h \
     random_num_generator.h \
     random_tool.h \
