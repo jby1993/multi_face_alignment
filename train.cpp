@@ -158,7 +158,7 @@ void train::save_verify_result(const std::string &root)
         {
             int id = m_before_imgsize[i]+j;
             QString tname(names[j].data());
-            tname.remove(temp.size()-4,4);
+            tname.remove(tname.size()-4,4);
             file = root+tname.toStdString()+"_pose.txt";
             io_utils::write_all_type_to_file<float>(m_train_paras.col(id),file);
         }

@@ -35,13 +35,13 @@ private:
     void show_delta_shape_exp_info();
     void compute_all_visible_features_multi_thread();
     void compute_update_keypos_R();
-    void compute_update_para_R();
+    void compute_update_para_R(bool use_U);
     void save_keypos_R(int casscade_level);
     void save_paras_R(int casscade_level);
     void optimize_all_shape_exp();
 
     void update_keypos_R();
-    void update_para_R();
+    void update_para_R(bool use_U);
 
     //solve ||x-Rf||^2+lamda*||R||
     void compute_R(const MatrixXf &x, const MatrixXf &f, float lamda, MatrixXf &R);

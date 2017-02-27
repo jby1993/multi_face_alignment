@@ -86,14 +86,25 @@ void train2::train_model()
     show_delta_shape_exp_info();
     m_keypos_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
     m_para_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
+    int pre_trained_num = 0;
+    for(int i=0;i<pre_trained_num;i++)
+    {
+        read_keypos_R(m_savemodel_root,i);
+        read_para_R(m_savemodel_root,i);
+    }
 //    read_keypos_R("../",0);
     for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
     {
         compute_all_visible_features_multi_thread();
-        compute_update_keypos_R();
-//        update_keypos_R();
+        if(m_casscade_level<pre_trained_num)
+            update_keypos_R();
+        else
+            compute_update_keypos_R();
         show_delta_keypos_info();
-        compute_update_para_R();
+        if(m_casscade_level<pre_trained_num)
+            update_para_R(false);
+        else
+            compute_update_para_R(false);
         show_delta_para_info();
         save_keypos_R(m_casscade_level);
         save_paras_R(m_casscade_level);
@@ -118,7 +129,7 @@ void train2::verify_model()
         compute_all_visible_features_multi_thread();
         update_keypos_R();
         show_delta_keypos_info();
-        update_para_R();
+        update_para_R(false);
         show_delta_para_info();
 
         optimize_all_shape_exp();
@@ -487,39 +498,63 @@ void train2::compute_update_keypos_R()
     MatrixXf x = m_groundtruth_keypos - m_train_keypos;
     MatrixXf &R=m_keypos_Rs[m_casscade_level];
     LOG(INFO)<<"casscade keypos "<<m_casscade_level<<" start computing...";
-    compute_R(x,f,5.0,R);
+    compute_R(x,f,50.0,R);
     LOG(INFO)<<"casscade keypos "<<m_casscade_level<<" result norm: "<<R.norm()<<
         " delta mean norm: "<<(x-R*f).colwise().norm().mean();
     //update
     m_train_keypos = m_train_keypos+R*f;
 }
 
-void train2::compute_update_para_R()
+void train2::compute_update_para_R(bool use_U)
 {
-    MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
-    f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
-    f.row(f.rows()-1).setOnes();
-    const MatrixXf &kR=m_keypos_Rs[m_casscade_level];
-    MatrixXf delta_U(kR.rows()+1, f.cols());
-    delta_U.block(0,0,kR.rows(),f.cols()) = kR*f;
-    delta_U.row(kR.rows()).setOnes();
+    if(use_U)
+    {
+        //use delta_U to infer delta_para
+        MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
+        f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
+        f.row(f.rows()-1).setOnes();
+        const MatrixXf &kR=m_keypos_Rs[m_casscade_level];
+        MatrixXf delta_U(kR.rows()+1, f.cols());
+        delta_U.block(0,0,kR.rows(),f.cols()) = kR*f;
+        delta_U.row(kR.rows()).setOnes();
 
-    MatrixXf delta_para;
-    compute_delta_para(delta_para);
-    //normalize paras
-    delta_para = (1.0/m_groundtruth_paras_sd.array()).matrix().asDiagonal()*delta_para;
-    MatrixXf &R = m_para_Rs[m_casscade_level];
+        MatrixXf delta_para;
+        compute_delta_para(delta_para);
+        //normalize paras
+        delta_para = (1.0/m_groundtruth_paras_sd.array()).matrix().asDiagonal()*delta_para;
+        MatrixXf &R = m_para_Rs[m_casscade_level];
 
-    LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
-    compute_R(delta_para,delta_U,500,R);
-    LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
-        " delta mean norm: "<<(delta_para-R*delta_U).colwise().norm().mean();
-    //update
-    delta_para = R*delta_U;
-    //unnormalize paras
-    delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
-    m_train_paras = m_train_paras+delta_para;
-
+        LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
+        compute_R(delta_para,delta_U,500,R);
+        LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
+                   " delta mean norm: "<<(delta_para-R*delta_U).colwise().norm().mean();
+        //update
+        delta_para = R*delta_U;
+        //unnormalize paras
+        delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
+        m_train_paras = m_train_paras+delta_para;
+    }
+    else
+    {
+        //use feature to infer delta_para
+        MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
+        f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
+        f.row(f.rows()-1).setOnes();
+        MatrixXf delta_para;
+        compute_delta_para(delta_para);
+        //normalize paras
+        delta_para = (1.0/m_groundtruth_paras_sd.array()).matrix().asDiagonal()*delta_para;
+        MatrixXf &R = m_para_Rs[m_casscade_level];
+        LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
+        compute_R(delta_para,f,500,R);
+        LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
+                   " delta mean norm: "<<(delta_para-R*f).colwise().norm().mean();
+        //update
+        delta_para = R*f;
+        //unnormalize paras
+        delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
+        m_train_paras = m_train_paras+delta_para;
+    }
 }
 
 void train2::save_keypos_R(int casscade_level)
@@ -543,7 +578,7 @@ void train2::optimize_all_shape_exp()
     LOG(INFO)<<"casscade shape exp "<<m_casscade_level<<" start optimizing...";
     Eigen::VectorXi nums(m_threadnum_for_compute_features);
     nums.setZero();
-    float lamda=1.0;    //regular weight
+    float lamda=10.0;    //regular weight
     Eigen::MatrixXf keypos_mean,keypos_base;
     Face::get_mean_vertex_base_on_ids(Face::get_dense_keypoint(),keypos_mean);
     Face::get_vertex_base_on_ids(Face::get_dense_keypoint(),keypos_base);
@@ -616,21 +651,36 @@ void train2::update_keypos_R()
     m_train_keypos = m_train_keypos+R*f;
 }
 
-void train2::update_para_R()
+void train2::update_para_R(bool use_U)
 {
-    MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
-    f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
-    f.row(f.rows()-1).setOnes();
-    const MatrixXf &kR=m_keypos_Rs[m_casscade_level];
-    MatrixXf delta_U(kR.rows()+1, f.cols());
-    delta_U.block(0,0,kR.rows(),f.cols()) = kR*f;
-    delta_U.row(kR.rows()).setOnes();
-    MatrixXf &R = m_para_Rs[m_casscade_level];
-    //update
-    MatrixXf delta_para = R*delta_U;
-    //unnormalize paras
-    delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
-    m_train_paras = m_train_paras+delta_para;
+    if(use_U)
+    {
+        MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
+        f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
+        f.row(f.rows()-1).setOnes();
+        const MatrixXf &kR=m_keypos_Rs[m_casscade_level];
+        MatrixXf delta_U(kR.rows()+1, f.cols());
+        delta_U.block(0,0,kR.rows(),f.cols()) = kR*f;
+        delta_U.row(kR.rows()).setOnes();
+        MatrixXf &R = m_para_Rs[m_casscade_level];
+        //update
+        MatrixXf delta_para = R*delta_U;
+        //unnormalize paras
+        delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
+        m_train_paras = m_train_paras+delta_para;
+    }
+    else
+    {
+        MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
+        f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
+        f.row(f.rows()-1).setOnes();
+        MatrixXf &R = m_para_Rs[m_casscade_level];
+        //update
+        MatrixXf delta_para = R*f;
+        //unnormalize paras
+        delta_para = m_groundtruth_paras_sd.asDiagonal()*delta_para;
+        m_train_paras = m_train_paras+delta_para;
+    }
 }
 
 void train2::compute_R(const MatrixXf &x, const MatrixXf &f, float lamda, MatrixXf &R)
