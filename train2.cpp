@@ -86,10 +86,12 @@ void train2::train_model()
     show_delta_shape_exp_info();
     m_keypos_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
     m_para_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
+//    read_keypos_R("../",0);
     for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
     {
         compute_all_visible_features_multi_thread();
         compute_update_keypos_R();
+//        update_keypos_R();
         show_delta_keypos_info();
         compute_update_para_R();
         show_delta_para_info();
@@ -140,7 +142,7 @@ void train2::save_verify_result(const std::string &root)
         {
             int id = m_before_imgsize[i]+j;
             QString tname(names[j].data());
-            tname.remove(temp.size()-4,4);
+            tname.remove(tname.size()-4,4);
             file = root+tname.toStdString()+"_pose.txt";
             io_utils::write_all_type_to_file<float>(m_train_paras.col(id),file);
         }
@@ -485,7 +487,7 @@ void train2::compute_update_keypos_R()
     MatrixXf x = m_groundtruth_keypos - m_train_keypos;
     MatrixXf &R=m_keypos_Rs[m_casscade_level];
     LOG(INFO)<<"casscade keypos "<<m_casscade_level<<" start computing...";
-    compute_R(x,f,1.0,R);
+    compute_R(x,f,5.0,R);
     LOG(INFO)<<"casscade keypos "<<m_casscade_level<<" result norm: "<<R.norm()<<
         " delta mean norm: "<<(x-R*f).colwise().norm().mean();
     //update
@@ -509,7 +511,7 @@ void train2::compute_update_para_R()
     MatrixXf &R = m_para_Rs[m_casscade_level];
 
     LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
-    compute_R(delta_para,delta_U,100.0,R);
+    compute_R(delta_para,delta_U,500,R);
     LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
         " delta mean norm: "<<(delta_para-R*delta_U).colwise().norm().mean();
     //update

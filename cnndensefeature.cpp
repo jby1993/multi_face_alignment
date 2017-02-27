@@ -87,8 +87,12 @@ void CNNDenseFeature::get_compute_visible_posfeatures(const Eigen::MatrixXf &pos
                 visible_features.block(f_dimension*i,0,f_dimension,1).setZero();
                 continue;
             }
+            Eigen::VectorXf temp(f_dimension);
             for(int id=0;id<f_dimension;id++)
-                visible_features(i*f_dimension+id) = features[id*img_size+y*f_length+x];
+                temp(id) = features[id*img_size+y*f_length+x];
+            temp = temp/temp.norm();    //normalize the feature
+//            visible_features(i*f_dimension+id) = features[id*img_size+y*f_length+x];
+            visible_features.block(i*f_dimension,0,f_dimension,1) = temp;
         }
         else
         {
