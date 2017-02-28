@@ -7,7 +7,7 @@ class draw_verify_result
 {
     typedef part_3DMM_face Face;
 public:
-    draw_verify_result(const std::string &data_root, const std::string &result_root, int threads_num);
+    draw_verify_result(const std::string &data_root, const std::string &result_root, const std::string &saveimg_root,int threads_num);
     void draw(bool is_draw_dense=false, bool is_draw_unvisible=true);
 private:
     void read_result_file_names(std::vector<std::string> &meshfiles, std::vector<std::vector<std::string> > &per_mesh_pose_files);
@@ -16,6 +16,7 @@ private:
     int m_threads_num;
     std::string m_data_root;
     std::string m_result_root;
+    std::string m_save_root;
     std::vector<Face> m_3dmm_meshs;
 };
 

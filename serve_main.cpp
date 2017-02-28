@@ -99,7 +99,7 @@ void call_meodule(train2 *compute)
         CHECK_GT(FLAGS_read_casscade_num,0)<<"VERIFY phase need a correct casscade num";
         compute->read_trained_model(FLAGS_read_model_root,FLAGS_read_casscade_num);
         compute->verify_model();
-        compute->save_verify_result("../verify_result/");
+        compute->save_verify_result(FLAGS_save_root);
     }
     else
         LOG(FATAL) << "phase must be \"TRAIN\" or \"VERIFY\"";

@@ -4,8 +4,8 @@
 #include <QStringList>
 #include "glog/logging.h"
 #include <opencv2/highgui/highgui.hpp>
-draw_verify_result::draw_verify_result(const std::string &data_root, const std::string &result_root, int threads_num)
-    :m_data_root(data_root),m_result_root(result_root),m_threads_num(threads_num)
+draw_verify_result::draw_verify_result(const std::string &data_root, const std::string &result_root, const std::string &saveimg_root, int threads_num)
+    :m_data_root(data_root),m_result_root(result_root),m_save_root(saveimg_root),m_threads_num(threads_num)
 {
     m_3dmm_meshs.resize(m_threads_num,Face());
 }
@@ -39,7 +39,7 @@ void draw_verify_result::draw(bool is_draw_dense, bool is_draw_unvisible)
         m_3dmm_meshs[thread_id].set_exp(exp);
         Eigen::MatrixXf verts;
         m_3dmm_meshs[thread_id].get_vertex_matrix(verts,false);
-        std::string savemesh = m_result_root+meshfiles[i].substr(0,meshfiles[i].size()-14)+".obj";
+        std::string savemesh = m_save_root+meshfiles[i].substr(0,meshfiles[i].size()-14)+".obj";
         OpenMesh::IO::write_mesh(m_3dmm_meshs[thread_id].get_part_face(),savemesh);
         const std::vector<std::string> &posefiles = per_mesh_pose_files[i];
         for(int j=0;j<posefiles.size();j++)
@@ -82,7 +82,7 @@ void draw_verify_result::draw(bool is_draw_dense, bool is_draw_unvisible)
                 savefile = savefile.substr(0,savefile.size()-4)+"_densep.jpg";
             else
                 savefile = savefile.substr(0,savefile.size()-4)+"_keyp.jpg";
-            cv::imwrite(m_result_root+savefile,img);
+            cv::imwrite(m_save_root+savefile,img);
         }
         nums[thread_id]=nums[thread_id]+1;
         LOG_IF(INFO,nums.sum()%100==0)<<"keypoints img draw have been computed 100 faces";
