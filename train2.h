@@ -4,7 +4,7 @@
 #include "face_imgs.h"
 #include "part_3dmm_face.h"
 #include "cnndensefeature.h"
-
+#include "siftdectector.h"
 class train2
 {
     typedef part_3DMM_face Face;
@@ -71,7 +71,7 @@ private:
 #ifdef USE_CNNFEATURE
     std::vector<CNNDenseFeature> m_feature_detectors;
 #else
-
+    std::vector<SIFTDectector>  m_feature_detectors;
 #endif
     std::vector<part_3DMM_face>  m_3dmm_meshs;
     std::string m_data_root;
@@ -91,6 +91,7 @@ private:
     Eigen::VectorXf m_groundtruth_shapes_exps_sd;
     std::vector<Eigen::MatrixXf> m_keypos_Rs;
     std::vector<Eigen::MatrixXf> m_para_Rs;
+
 };
 
 #endif // TRAIN2_H

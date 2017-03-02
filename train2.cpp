@@ -241,13 +241,23 @@ void train2::set_feature_compute_gpu(const std::vector<int> ids)
     {
         LOG(FATAL)<<"train::set_feature_compute_gpu ids size wrong";
         m_gpuid_for_feature_computes.resize(1,0);
+#ifdef USE_CNNFEATURE
         m_feature_detectors.push_back(CNNDenseFeature(0));
+#else
+       m_feature_detectors.push_back(SIFTDectector());
+       LOG(INFO)<<"SIFT dectector 0 has been build.";
+#endif
     }
     m_gpuid_for_feature_computes=ids;
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
+#ifdef USE_CNNFEATURE
         m_feature_detectors.push_back(CNNDenseFeature(m_gpuid_for_feature_computes[i]));
         LOG(INFO)<<"Net "<<i<<" has been build.";
+#else
+       m_feature_detectors.push_back(SIFTDectector());
+       LOG(INFO)<<"SIFT dectector "<<i<<" has been build.";
+#endif
     }
 }
 
@@ -521,18 +531,19 @@ void train2::compute_all_visible_features_multi_thread()
     {
 
         int thread_id=omp_get_thread_num();
+#ifdef USE_CNNFEATURE
         //for Caffe set thread independent Caffe setting, this is essential, otherwise non-major thread caffe will
         //not take the setting on CNNDenseFeature, like setmode(GPU), still default CPU
         Caffe::set_mode(Caffe::GPU);
         Caffe::SetDevice(m_gpuid_for_feature_computes[thread_id]);
+#endif
 
         int start = m_before_imgsize[i];
         int end=(i+1)<m_face_img_num?m_before_imgsize[i+1]:m_all_img_num;
         face_imgs *data = m_face_imgs_pointer[i];
         for(int j=start;j<end;j++)
         {
-            Eigen::VectorXf visible_features(m_feature_size*Face::get_dense_keypoint_size());
-            m_feature_detectors[thread_id].set_data(data->get_img(j-start));
+            Eigen::VectorXf visible_features(m_feature_size*Face::get_dense_keypoint_size());            
             Eigen::MatrixXf keypos;
             keypos=m_train_keypos.col(j);
             keypos.resize(2,keypos.size()/2);
@@ -542,8 +553,16 @@ void train2::compute_all_visible_features_multi_thread()
                     visibility[k] = true;
                 else
                     visibility[k] = false;
+#ifdef USE_CNNFEATURE
+            m_feature_detectors[thread_id].set_data(data->get_img(j-start));
             m_feature_detectors[thread_id].get_compute_visible_posfeatures(keypos,visibility,visible_features);
-
+#else
+            Eigen::VectorXf scales(Face::get_dense_keypoint_size());
+            scales.setOnes();
+            scales *= 6.0;
+            m_feature_detectors[thread_id].DescriptorOnCustomPoints(data->get_img(j-start),data->img_length(),data->img_length(),
+                                                                    visibility,keypos,scales,visible_features);
+#endif
             m_visible_features.col(j) = visible_features;
         }
         nums[thread_id]=nums[thread_id]+1;
@@ -554,13 +573,18 @@ void train2::compute_all_visible_features_multi_thread()
 
 void train2::compute_update_keypos_R()
 {
+#ifdef USE_CNNFEATURE
+    float lamda = 50.0;
+#else
+    float lamda = 5.0;
+#endif
     MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
     f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
     f.row(f.rows()-1).setOnes();
     MatrixXf x = m_groundtruth_keypos - m_train_keypos;
     MatrixXf &R=m_keypos_Rs[m_casscade_level];
     LOG(INFO)<<"casscade keypos "<<m_casscade_level<<" start computing...";
-    compute_R(x,f,50.0,R);
+    compute_R(x,f,lamda,R);
     LOG(INFO)<<"casscade keypos "<<m_casscade_level<<" result norm: "<<R.norm()<<
         " delta mean norm: "<<(x-R*f).colwise().norm().mean();
     //update
@@ -569,6 +593,11 @@ void train2::compute_update_keypos_R()
 
 void train2::compute_update_para_R(bool use_U)
 {
+#ifdef USE_CNNFEATURE
+    float lamda = 500.0;
+#else
+    float lamda = 5.0;
+#endif
     if(use_U)
     {
         //use delta_U to infer delta_para
@@ -587,7 +616,7 @@ void train2::compute_update_para_R(bool use_U)
         MatrixXf &R = m_para_Rs[m_casscade_level];
 
         LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
-        compute_R(delta_para,delta_U,500,R);
+        compute_R(delta_para,delta_U,lamda,R);
         LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
                    " delta mean norm: "<<(delta_para-R*delta_U).colwise().norm().mean();
         //update
@@ -608,7 +637,7 @@ void train2::compute_update_para_R(bool use_U)
         delta_para = (1.0/m_groundtruth_paras_sd.array()).matrix().asDiagonal()*delta_para;
         MatrixXf &R = m_para_Rs[m_casscade_level];
         LOG(INFO)<<"casscade para "<<m_casscade_level<<" start computing...";
-        compute_R(delta_para,f,500,R);
+        compute_R(delta_para,f,lamda,R);
         LOG(INFO)<<"casscade para "<<m_casscade_level<<" result norm: "<<R.norm()<<
                    " delta mean norm: "<<(delta_para-R*f).colwise().norm().mean();
         //update
@@ -640,7 +669,11 @@ void train2::optimize_all_shape_exp()
     LOG(INFO)<<"casscade shape exp "<<m_casscade_level<<" start optimizing...";
     Eigen::VectorXi nums(m_threadnum_for_compute_features);
     nums.setZero();
-    float lamda=10.0;    //regular weight
+#ifdef USE_CNNFEATURE
+    float lamda = 10.0;
+#else
+    float lamda = 0.01;
+#endif
     Eigen::MatrixXf keypos_mean,keypos_base;
     Face::get_mean_vertex_base_on_ids(Face::get_dense_keypoint(),keypos_mean);
     Face::get_vertex_base_on_ids(Face::get_dense_keypoint(),keypos_base);

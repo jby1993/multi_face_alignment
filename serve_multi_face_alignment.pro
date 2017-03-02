@@ -40,15 +40,18 @@ INCLUDEPATH += /home/jby/caffe/include \
                             /usr/local/cuda-7.5/include \
                             /usr/include \
                             /usr/local/include \
+			    /home/jby/vlfeat-0.9.20/vl \
 
 LIBS += -L/home/jby/caffe/build/lib \
             -L/usr/local/lib \
 	    -L/usr/lib64/ \
 	-L/usr/local/cuda-7.5/lib64 \
+	-L/home/jby/vlfeat-0.9.20/bin/glnxa64 \
 
 LIBS += -lcaffe -lglog -lboost_system -lprotobuf -lgflags \
         -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_imgcodecs\
         -lOpenMeshCore -lOpenMeshTools \
 	-lgomp -lpthread \
         -lcuda -lcudart -lcublas\
+	-lvl \
 
