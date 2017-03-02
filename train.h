@@ -81,7 +81,7 @@ private:
 #ifdef USE_CNNFEATURE
     std::vector<CNNDenseFeature> m_feature_detectors;
 #else
-
+    std::vector<CNNDenseFeature> m_feature_detectors;
 #endif
     std::vector<part_3DMM_face>  m_3dmm_meshs;
     std::string m_data_root;
