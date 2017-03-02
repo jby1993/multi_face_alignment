@@ -50,7 +50,7 @@ void train2::read_img_datas(const std::string &meshpara_list, const std::string 
         m_all_img_num+=per_imgfiles[i].size();
         LOG_IF(INFO,i%100==99)<<i<<" person imgs have been readed.";
     }
-    LOG(INFO)<<"read "<<mesh_files.size()<<" person imgs "<<"done!";
+    LOG(INFO)<<"read "<<per_imgfiles.size()<<" person imgs and total"<<m_all_img_num<<" imges "<<"done!";
 
     //initial need by multithread feature computation variables
     m_face_imgs_pointer.clear();
@@ -73,6 +73,51 @@ void train2::read_img_datas(const std::string &meshpara_list, const std::string 
     m_keypos_visible.resize(Face::get_dense_keypoint_size(),m_all_img_num);
 
     compute_groundtruth_keypos_multithread();
+}
+
+void train2::read_test_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist)
+{
+    std::vector<std::string> mesh_files;
+    io_utils::read_all_type_file_to_vector<std::string>(meshpara_list.data(),mesh_files);
+    std::vector<std::vector<std::string > > per_imgfiles;
+    io_utils::read_all_type_rowsfile_to_2vector<std::string>(permesh_imglist.data(),per_imgfiles);
+    m_face_imgs.clear();
+    m_all_img_num=0;
+    LOG(INFO)<<"start read person imgs...";
+    for(int i=0; i<mesh_files.size(); i++)
+    {
+        face_imgs temp(m_data_root,mesh_files[i],
+                       Face::get_shape_pcanum(),Face::get_exp_pcanum());
+        temp.set_img_num(per_imgfiles[i]);
+        temp.read_imgs();
+//        temp.read_pose_paras();
+//        temp.read_shape_exp();
+        m_face_imgs.push_back(temp);
+        m_all_img_num+=per_imgfiles[i].size();
+        LOG_IF(INFO,i%100==99)<<i<<" person imgs have been readed.";
+    }
+    LOG(INFO)<<"read "<<per_imgfiles.size()<<" person imgs and total"<<m_all_img_num<<" imges "<<"done!";
+
+    //initial need by multithread feature computation variables
+    m_face_imgs_pointer.clear();
+    m_before_imgsize.clear();
+    std::list<face_imgs>::iterator iter=m_face_imgs.begin();
+    int before_imgsize=0;
+    for(;iter!=m_face_imgs.end();iter++)
+    {
+        m_face_imgs_pointer.push_back(&(*iter));
+        m_before_imgsize.push_back(before_imgsize);
+        before_imgsize+=iter->img_size();
+    }
+
+    m_face_img_num = m_face_imgs.size();
+    m_train_paras.resize(m_para_num,m_all_img_num);
+    m_train_shapes.resize(Face::get_shape_pcanum(),m_face_img_num);
+    m_train_exps.resize(Face::get_exp_pcanum(),m_face_img_num);
+    m_visible_features.resize(Face::get_dense_keypoint_size()*m_feature_size,m_all_img_num);
+    m_train_keypos.resize(2*Face::get_dense_keypoint_size(),m_all_img_num);
+    m_keypos_visible.resize(Face::get_dense_keypoint_size(),m_all_img_num);
+
 }
 
 void train2::train_model()
@@ -134,6 +179,23 @@ void train2::verify_model()
 
         optimize_all_shape_exp();
         show_delta_shape_exp_info();
+        compute_keypos_visibility();
+    }
+}
+
+void train2::test_model()
+{
+    initial_shape_exp_with_mean();
+    initial_para();
+    compute_keypos_visibility();
+    m_casscade_level=-1;
+    for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
+    {
+        compute_all_visible_features_multi_thread();
+        update_keypos_R();
+        update_para_R(false);
+
+        optimize_all_shape_exp();
         compute_keypos_visibility();
     }
 }

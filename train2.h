@@ -11,8 +11,10 @@ class train2
 public:
     train2(int thread_num);
     void read_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist);
+    void read_test_img_datas(const std::string &meshpara_list, const std::string &permesh_imglist);
     void train_model();
     void verify_model();
+    void test_model();
     void save_verify_result(const std::string& root);
     void read_trained_model(const std::string &root, int casscade_num);
     void set_data_root(const std::string &root){m_data_root=root;}
