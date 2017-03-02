@@ -6,7 +6,7 @@ CONFIG += c++11
 TARGET = multi_face_alignment
 CONFIG += console
 CONFIG -= app_bundle
-DEFINES += USE_CNNFEATURE
+#DEFINES += USE_CNNFEATURE
 TEMPLATE = app
 
 QMAKE_CXXFLAGS += -fopenmp
@@ -19,7 +19,8 @@ SOURCES += serve_main.cpp \
     train.cpp \
     train2.cpp \
     divide_orientation_space.cpp \
-    random_tool.cpp
+    random_tool.cpp \
+    siftdectector.cpp
 
 HEADERS += \
     cnndensefeature.h \
@@ -32,7 +33,8 @@ HEADERS += \
     divide_orientation_space.h \
     random_num_generator.h \
     random_tool.h \
-    supplement_gpu_math_functions.hpp
+    supplement_gpu_math_functions.hpp \
+    siftdectector.h
 
 INCLUDEPATH += /home/jby/caffe/include \
                             /home/jby/caffe/build/include \
