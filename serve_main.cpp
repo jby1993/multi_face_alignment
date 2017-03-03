@@ -92,17 +92,30 @@ void call_meodule(train2 *compute)
     if (FLAGS_phase == "")
         LOG(FATAL)<<"phase must be \"TRAIN\" or \"VERIFY\"";
     else if (FLAGS_phase == "TRAIN")
+    {
+        compute->read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
         compute->train_model();
+    }
     else if (FLAGS_phase == "VERIFY")
     {
         CHECK_GT(FLAGS_read_model_root.size(),0)<<"VERIFY phase need a trained model";
         CHECK_GT(FLAGS_read_casscade_num,0)<<"VERIFY phase need a correct casscade num";
+        compute->read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
         compute->read_trained_model(FLAGS_read_model_root,FLAGS_read_casscade_num);
         compute->verify_model();
         compute->save_verify_result(FLAGS_save_root);
     }
+    else if(FLAGS_phase == "TEST")
+    {
+        CHECK_GT(FLAGS_read_model_root.size(),0)<<"VERIFY phase need a trained model";
+        CHECK_GT(FLAGS_read_casscade_num,0)<<"VERIFY phase need a correct casscade num";
+        compute->read_test_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
+        compute->read_trained_model(FLAGS_read_model_root,FLAGS_read_casscade_num);
+        compute->test_model();
+        compute->save_verify_result(FLAGS_save_root);
+    }
     else
-        LOG(FATAL) << "phase must be \"TRAIN\" or \"VERIFY\"";
+        LOG(FATAL) << "phase must be \"TRAIN\" or \"VERIFY\" or \"TEST\"";
 }
 
 int main(int argc, char *argv[])
@@ -138,8 +151,6 @@ int main(int argc, char *argv[])
     my_train.set_matrix_compute_gpu(FLAGS_matrix_compute_gpu);
     my_train.set_data_root(FLAGS_data_root);
     my_train.set_save_model_root(FLAGS_save_root);
-    my_train.read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
-//    my_train.train_model();
     call_meodule(&my_train);
 
 
