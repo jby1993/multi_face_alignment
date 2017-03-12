@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sstream>
 #include <Eigen/Dense>
+#include "glog/logging.h"
 namespace io_utils{
 using namespace std;
 using namespace Eigen;
@@ -37,6 +38,7 @@ void read_all_type_file_to_vector(const string &file, vector<T> &ids)
 {
     ids.clear();
     ifstream in(file.data());
+    LOG_IF(FATAL,!in.is_open())<<file<<" open failed!";
     while(true)
     {
         T id;

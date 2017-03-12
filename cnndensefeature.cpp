@@ -1,7 +1,8 @@
 #include "cnndensefeature.h"
 #include "io_utils.h"
-CNNDenseFeature::CNNDenseFeature(int gpu_id)
+CNNDenseFeature::CNNDenseFeature(int gpu_id, bool normalized)
 {
+    is_normalized = normalized;
     f_length=224;   //normalized image size
     f_dimension=64;
     img_size=f_length*f_length;
@@ -91,11 +92,22 @@ void CNNDenseFeature::get_compute_visible_posfeatures(const Eigen::MatrixXf &pos
 //            for(int id=0;id<f_dimension;id++)
 //                visible_features(i*f_dimension+id) = features[id*img_size+y*f_length+x];
             //nomalize
-            Eigen::VectorXf temp(f_dimension);
-            for(int id=0;id<f_dimension;id++)
-                temp(id) = features[id*img_size+y*f_length+x];
-            temp = temp/temp.norm();
-            visible_features.block(i*f_dimension,0,f_dimension,1) = temp;
+            if(is_normalized)
+            {
+                Eigen::VectorXf temp(f_dimension);
+                for(int id=0;id<f_dimension;id++)
+                    temp(id) = features[id*img_size+y*f_length+x];
+                if(temp.norm()<1.e-6)
+                    temp.setZero();
+                else
+                    temp = temp/temp.norm();
+                visible_features.block(i*f_dimension,0,f_dimension,1) = temp;
+            }
+            else
+            {
+                for(int id=0;id<f_dimension;id++)
+                    visible_features(i*f_dimension+id) = features[id*img_size+y*f_length+x];
+            }
         }
         else
         {
@@ -114,6 +126,7 @@ void CNNDenseFeature::feature_compute()
         return;
     }
     caffe_copy<float>(features.size(),result[0]->cpu_data(), features.data());
+//    caffe_copy<float>(features.size(),features.data(), features.data());
     is_updated=true;
 }
 

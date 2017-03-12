@@ -388,7 +388,7 @@ void train2::read_para_mean_sd()
     memcpy(temp.data(),vals.data()+m_para_num,m_para_num*sizeof(float));
     //chengxu li de para sunxu yu wenjian li de bu yi yang, duqu shi gai cheng yi zhi
     m_groundtruth_paras_sd(0) = temp(5);
-    m_groundtruth_paras_sd(1)=-temp[0];  m_groundtruth_paras_sd(2)=-temp[1];  m_groundtruth_paras_sd(3)=-temp[2];
+    m_groundtruth_paras_sd(1)=temp[0];  m_groundtruth_paras_sd(2)=temp[1];  m_groundtruth_paras_sd(3)=temp[2];
     m_groundtruth_paras_sd(4)=temp[3];
     m_groundtruth_paras_sd(5)=temp[4];
 }

@@ -8,7 +8,7 @@ using namespace caffe;
 class CNNDenseFeature
 {
 public:
-    CNNDenseFeature(int gpu_id);
+    CNNDenseFeature(int gpu_id, bool normalized=true);
     //input image must be normalized image, i.e 224*224*float, left up origin, row major
     void set_data(const std::vector<float> &data);
     const std::vector<float>& get_features();
@@ -25,6 +25,7 @@ private:
     int f_dimension;
     int img_size;
     bool is_updated;
+    bool is_normalized;
 };
 
 #endif // CNNDENSEFEATURE_H

@@ -13,6 +13,8 @@ static int m_exp_pcanum;
 static int m_whole_vnum;
 static std::vector<int> m_whole_keypoints;
 static std::vector<int> m_part_keypoints;
+static std::vector<int> m_aflw21_keypoints;
+static std::vector<int> m_land68_keypoints;
 static std::vector<int> m_part_dense_keypoints;
 static std::vector<int> m_partv_2_wholev;
 static bool is_3DMM_initialized=false;
@@ -32,6 +34,15 @@ void part_3DMM_face::set_shape(const VectorXf &shape)
 void part_3DMM_face::set_exp(const VectorXf &exp)
 {
     m_exp = exp;
+    is_whole_updated=false;
+    is_part_updated=false;
+}
+
+void part_3DMM_face::set_shape_exp(const std::vector<float> &para)
+{
+    LOG_IF(FATAL,para.size()!=m_shape_pcanum+m_exp_pcanum)<<"shape and exp para size wrong!";
+    memcpy(m_shape.data(),para.data(),sizeof(float)*m_shape_pcanum);
+    memcpy(m_exp.data(),para.data()+m_shape_pcanum,sizeof(float)*m_exp_pcanum);
     is_whole_updated=false;
     is_part_updated=false;
 }
@@ -124,6 +135,37 @@ void part_3DMM_face::get_mean_normal(int v_id, TriMesh::Normal &mean_normal,int 
     mean_normal/=sqrt(mean_normal|mean_normal);
 }
 
+void part_3DMM_face::get_neighborIds_around_v(int v_id, std::vector<int> &ids, int neighbor_size, bool is_whole)
+{
+    TriMesh *mesh;
+    if(is_whole)    mesh = &m_whole_face;
+    else    mesh = &m_part_face;
+    std::set<int> neighbors;
+    std::vector<int> ring;
+    ring.push_back(v_id);
+    for(int time=0;time<neighbor_size;time++)
+    {
+        std::vector<int> next_ring;
+        for(int i=0;i<ring.size();i++)
+        {
+            if(neighbors.count(ring[i]))
+                continue;
+            neighbors.insert(ring[i]);
+            TriMesh::VertexVertexIter vv_it = mesh->vv_iter(TriMesh::VertexHandle(ring[i]));
+            for(;vv_it.is_valid();vv_it++)
+            {
+                next_ring.push_back((*vv_it).idx());
+            }
+        }
+        ring = next_ring;
+    }
+    ids.clear();
+    for(std::set<int>::iterator iter=neighbors.begin(); iter!= neighbors.end(); iter++)
+    {
+        ids.push_back(*iter);
+    }
+}
+
 int part_3DMM_face::get_shape_pcanum()
 {
     return m_shape_pcanum;
@@ -144,9 +186,24 @@ int part_3DMM_face::get_dense_keypoint_size()
     return m_part_dense_keypoints.size();
 }
 
+int part_3DMM_face::get_whole_keypoint_size()
+{
+    return m_whole_keypoints.size();
+}
+
 const std::vector<int> &part_3DMM_face::get_part_keypoints()
 {
     return m_part_keypoints;
+}
+
+const std::vector<int> &part_3DMM_face::get_aflw21_keypoints()
+{
+    return m_aflw21_keypoints;
+}
+
+const std::vector<int> &part_3DMM_face::get_land68_keypoints()
+{
+    return m_land68_keypoints;
 }
 
 int part_3DMM_face::get_dense_keypoint_id(int i)
@@ -156,9 +213,21 @@ int part_3DMM_face::get_dense_keypoint_id(int i)
     return m_part_dense_keypoints[i];
 }
 
+int part_3DMM_face::get_whole_keypoint_id(int i)
+{
+    CHECK_GE(i,0)<<"id"<<i<<" is less than zero!";
+    CHECK_LT(i,get_whole_keypoint_size())<<"id"<<i<<" is exceed size!";
+    return m_whole_keypoints[i];
+}
+
 const std::vector<int> &part_3DMM_face::get_dense_keypoint()
 {
     return m_part_dense_keypoints;
+}
+
+const std::vector<int> &part_3DMM_face::get_whole_keypoint()
+{
+    return m_whole_keypoints;
 }
 
 const std::vector<int> &part_3DMM_face::get_partv2wholev()
@@ -176,15 +245,20 @@ const MatrixXf &part_3DMM_face::get_exp_st()
     return m_exp_st;
 }
 
-void part_3DMM_face::get_mean_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base)
+void part_3DMM_face::get_mean_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base, bool is_whole_id)
 {
     std::vector<int> wids;
-    int partvnum=m_partv_2_wholev.size();
-    for(int i=0;i<ids.size();i++)
+    if(!is_whole_id)
     {
-        LOG_IF(FATAL,ids[i]>=partvnum)<<"ids input is illegal!";
-        wids.push_back(m_partv_2_wholev[ids[i]]);
+        int partvnum=m_partv_2_wholev.size();
+        for(int i=0;i<ids.size();i++)
+        {
+            LOG_IF(FATAL,ids[i]>=partvnum)<<"ids input is illegal!";
+            wids.push_back(m_partv_2_wholev[ids[i]]);
+        }
     }
+    else
+        wids=ids;
     Eigen::MatrixXf meantemp=m_mean_exp+m_mean_shape;
     meantemp.resize(meantemp.size(),1);
     base.resize(wids.size()*3,1);
@@ -194,15 +268,20 @@ void part_3DMM_face::get_mean_vertex_base_on_ids(const std::vector<int> &ids, Ma
     }
 }
 
-void part_3DMM_face::get_shape_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base)
+void part_3DMM_face::get_shape_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base, bool is_whole_id)
 {
     std::vector<int> wids;
-    int partvnum=m_partv_2_wholev.size();
-    for(int i=0;i<ids.size();i++)
+    if(!is_whole_id)
     {
-        LOG_IF(FATAL,ids[i]>=partvnum)<<"ids input is illegal!";
-        wids.push_back(m_partv_2_wholev[ids[i]]);
+        int partvnum=m_partv_2_wholev.size();
+        for(int i=0;i<ids.size();i++)
+        {
+            LOG_IF(FATAL,ids[i]>=partvnum)<<"ids input is illegal!";
+            wids.push_back(m_partv_2_wholev[ids[i]]);
+        }
     }
+    else
+        wids = ids;
     base.resize(wids.size()*3,m_shape_pcanum);
     for(int i=0;i<wids.size();i++)
     {
@@ -210,15 +289,20 @@ void part_3DMM_face::get_shape_vertex_base_on_ids(const std::vector<int> &ids, M
     }
 }
 
-void part_3DMM_face::get_exp_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base)
+void part_3DMM_face::get_exp_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base, bool is_whole_id)
 {
     std::vector<int> wids;
-    int partvnum=m_partv_2_wholev.size();
-    for(int i=0;i<ids.size();i++)
+    if(!is_whole_id)
     {
-        LOG_IF(FATAL,ids[i]>=partvnum)<<"ids input is illegal!";
-        wids.push_back(m_partv_2_wholev[ids[i]]);
+        int partvnum=m_partv_2_wholev.size();
+        for(int i=0;i<ids.size();i++)
+        {
+            LOG_IF(FATAL,ids[i]>=partvnum)<<"ids input is illegal!";
+            wids.push_back(m_partv_2_wholev[ids[i]]);
+        }
     }
+    else
+        wids=ids;
     base.resize(wids.size()*3,m_exp_pcanum);
     for(int i=0;i<wids.size();i++)
     {
@@ -226,13 +310,13 @@ void part_3DMM_face::get_exp_vertex_base_on_ids(const std::vector<int> &ids, Mat
     }
 }
 
-void part_3DMM_face::get_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base)
+void part_3DMM_face::get_vertex_base_on_ids(const std::vector<int> &ids, MatrixXf &base, bool is_whole_id)
 {
     base.resize(3*ids.size(),m_shape_pcanum+m_exp_pcanum);
     Eigen::MatrixXf temp;
-    get_shape_vertex_base_on_ids(ids,temp);
+    get_shape_vertex_base_on_ids(ids,temp,is_whole_id);
     base.block(0,0,3*ids.size(),m_shape_pcanum)=temp;
-    get_exp_vertex_base_on_ids(ids,temp);
+    get_exp_vertex_base_on_ids(ids,temp,is_whole_id);
     base.block(0,m_shape_pcanum,3*ids.size(),m_exp_pcanum)=temp;
 }
 
@@ -246,10 +330,13 @@ void part_3DMM_face::initial()
                                   m_whole_vnum,m_exp_pcanum);
         io_utils::read_all_type_file_to_vector<int>("../resource/partv23dmmv.txt",m_partv_2_wholev);
         io_utils::read_all_type_file_to_vector<int>("../resource/part_face_keypoints.txt",m_part_keypoints);
+        io_utils::read_all_type_file_to_vector<int>("../resource/part_aflw21_keypoints.txt",m_aflw21_keypoints);
+        io_utils::read_all_type_file_to_vector<int>("../resource/part_land68_keypoints.txt",m_land68_keypoints);
         io_utils::read_all_type_file_to_vector<int>("../resource/part_dense_keypoints.txt",m_part_dense_keypoints);
-        m_whole_keypoints.clear();
-        for(int i=0;i<m_part_keypoints.size();i++)
-            m_whole_keypoints.push_back(m_partv_2_wholev[m_part_keypoints[i]]);
+        io_utils::read_all_type_file_to_vector<int>("../resource/whole_MultiPie68_keypoints.txt",m_whole_keypoints);
+//        m_whole_keypoints.clear();
+//        for(int i=0;i<m_part_keypoints.size();i++)
+//            m_whole_keypoints.push_back(m_partv_2_wholev[m_part_keypoints[i]]);
         is_3DMM_initialized = true;
     }
 

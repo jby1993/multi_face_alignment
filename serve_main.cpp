@@ -4,13 +4,17 @@
 #include <opencv2/highgui/highgui.hpp>
 #include "train.h"
 #include "train2.h"
+#include "train3.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "boost/algorithm/string.hpp"
 #include "boost/lexical_cast.hpp"
+#include <QDir>
+#include <QStringList>
+
 
 DEFINE_string(phase, "TRAIN",
-    "Essential; network phase (TRAIN or VERIFY). must have one.");
+    "Essential; network phase (TRAIN or VERIFY or TEST). must have one.");
 DEFINE_string(read_model_root, "",
     "Optional; if phase is not TRAIN, trained models are needed.");
 DEFINE_int32(read_casscade_num,5,
@@ -26,35 +30,17 @@ DEFINE_int32(feature_threadnum, 1,
              "so must equal to feature_compute_gpus num");
 DEFINE_string(data_root, "",
     "Essential; data save root, must have / end.");
+DEFINE_string(land_root,"",
+              "used in train3");
+DEFINE_string(pose_root,"",
+              "used in train3");
 DEFINE_string(save_root, "",
-    "Essential; save model root, must have / end.");
+    "Essential; save model root or save verify root, must have / end.");
 DEFINE_string(meshpara_list, "",
     "Essential; read meshpara file.");
 DEFINE_string(permesh_imglists, "",
     "Essential; read permesh imglists file.");
 
-void test_cnnfeature()
-{
-    //    CNNDenseFeature feat;
-    //    cv::Mat tmp=cv::imread("../lfpw_12_0.jpg",cv::IMREAD_GRAYSCALE);
-    //    tmp.convertTo(tmp,CV_32F,1.0);
-
-    //    std::vector<float> img;
-    //    img.resize(tmp.rows*tmp.cols,0.0);
-    //    float *now_data = img.data();
-    //    for(int i=0; i<tmp.rows; i++)
-    //    {
-    //        const float *ptr = tmp.ptr<float>(i);
-    //        memcpy(now_data, ptr, sizeof(float)*tmp.cols);
-    //        now_data+=tmp.cols;
-    //    }
-
-
-    //    feat.set_data(img);
-    ////    feat.feature_compute();
-    //    std::cout<<"start compute feature"<<std::endl;
-    //    io_utils::write_all_type_to_bin<float>(feat.get_features(),"test.bin");
-}
 void read_feature_gpu_ids(std::vector<int> &gpus)
 {
     gpus.clear();
@@ -87,29 +73,30 @@ void read_feature_gpu_ids(std::vector<int> &gpus)
     }
 }
 
-void call_meodule(train2 *compute)
+void call_meodule(train3 *compute)
 {
     if (FLAGS_phase == "")
         LOG(FATAL)<<"phase must be \"TRAIN\" or \"VERIFY\"";
     else if (FLAGS_phase == "TRAIN")
     {
-        compute->read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
+//        compute->read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
+        compute->read_img_datas(FLAGS_permesh_imglists);
         compute->train_model();
     }
     else if (FLAGS_phase == "VERIFY")
     {
         CHECK_GT(FLAGS_read_model_root.size(),0)<<"VERIFY phase need a trained model";
         CHECK_GT(FLAGS_read_casscade_num,0)<<"VERIFY phase need a correct casscade num";
-        compute->read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
+//        compute->read_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
         compute->read_trained_model(FLAGS_read_model_root,FLAGS_read_casscade_num);
-        compute->verify_model();
+//        compute->verify_model();
         compute->save_verify_result(FLAGS_save_root);
     }
     else if(FLAGS_phase == "TEST")
     {
         CHECK_GT(FLAGS_read_model_root.size(),0)<<"VERIFY phase need a trained model";
         CHECK_GT(FLAGS_read_casscade_num,0)<<"VERIFY phase need a correct casscade num";
-        compute->read_test_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
+//        compute->read_test_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
         compute->read_trained_model(FLAGS_read_model_root,FLAGS_read_casscade_num);
         compute->test_model();
         compute->save_verify_result(FLAGS_save_root);
@@ -117,6 +104,8 @@ void call_meodule(train2 *compute)
     else
         LOG(FATAL) << "phase must be \"TRAIN\" or \"VERIFY\" or \"TEST\"";
 }
+
+
 
 int main(int argc, char *argv[])
 {
@@ -146,10 +135,12 @@ int main(int argc, char *argv[])
     for(int i=0;i<FLAGS_feature_threadnum;i++)
         LOG(INFO)<<feature_compute_gpus[i]<<",";
 
-    train2 my_train(thread_num);
+    train3 my_train(thread_num);
     my_train.set_feature_compute_gpu(feature_compute_gpus);
     my_train.set_matrix_compute_gpu(FLAGS_matrix_compute_gpu);
-    my_train.set_data_root(FLAGS_data_root);
+    my_train.set_img_root(FLAGS_data_root);
+    my_train.set_trulands_root(FLAGS_land_root);
+    my_train.set_truposes_root(FLAGS_pose_root);
     my_train.set_save_model_root(FLAGS_save_root);
     call_meodule(&my_train);
 

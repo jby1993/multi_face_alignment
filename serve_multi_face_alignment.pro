@@ -15,9 +15,11 @@ SOURCES += serve_main.cpp \
     cnndensefeature.cpp \
     io_utils.cpp \
     face_imgs.cpp \
+    face_img.cpp \
     part_3dmm_face.cpp \
     train.cpp \
     train2.cpp \
+    train3.cpp \
     divide_orientation_space.cpp \
     random_tool.cpp \
     siftdectector.cpp
@@ -26,10 +28,12 @@ HEADERS += \
     cnndensefeature.h \
     io_utils.h \
     face_imgs.h \
+    face_img.h \
     part_3dmm_face.h \
     tri_mesh.h \
     train.h \
     train2.h \
+    train3.h \
     divide_orientation_space.h \
     random_num_generator.h \
     random_tool.h \
