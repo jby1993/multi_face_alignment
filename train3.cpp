@@ -10,7 +10,7 @@ train3::train3(int thread_num)
     m_para_num = 6;
     m_casscade_sum = 6;
     m_threadnum_for_compute_features=thread_num;
-    m_normalize_feature=true;
+    m_normalize_feature=false;
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
 //        m_feature_detectors.push_back(CNNDenseFeature());
@@ -455,7 +455,7 @@ void train3::compute_all_visible_features_multi_thread()
 void train3::compute_update_keypos_R()
 {
 #ifdef USE_CNNFEATURE
-    float lamda = 10.0;
+    float lamda = 20.0;
 #else
     float lamda = 5.0;
 #endif
@@ -476,7 +476,7 @@ void train3::compute_update_keypos_R()
 void train3::compute_update_para_R()
 {
 #ifdef USE_CNNFEATURE
-    float lamda = 500.0;
+    float lamda = 10.0;
 #else
     float lamda = 5.0;
 #endif
@@ -522,7 +522,7 @@ void train3::optimize_shape_exp()
     Eigen::VectorXi nums(m_threadnum_for_compute_features);
     nums.setZero();
 #ifdef USE_CNNFEATURE
-    float lamda = 10.0;
+    float lamda = 100.0;
 #else
     float lamda = 0.01;
 #endif
