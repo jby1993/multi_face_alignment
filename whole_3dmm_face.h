@@ -19,8 +19,11 @@ public:
     static int get_shape_pcanum();
     static int get_exp_pcanum();
     static int get_keypoints_size();
+    static int get_featurekeypoints_size();
     static const std::vector<int>& get_keypoints();
+    static const std::vector<int>& get_featurekeypoints();
     static int get_keypoint_id(int i);
+    static int get_featurekeypoint_id(int i);
     static const Eigen::MatrixXf& get_shape_st();
     static const Eigen::MatrixXf& get_exp_st();
     //ids are part face id, first convert to whole face, then extract base

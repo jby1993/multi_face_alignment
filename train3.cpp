@@ -10,7 +10,7 @@ train3::train3(int thread_num)
     m_para_num = 6;
     m_casscade_sum = 6;
     m_threadnum_for_compute_features=thread_num;
-    m_normalize_feature=false;
+    m_normalize_feature=true;
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
 //        m_feature_detectors.push_back(CNNDenseFeature());
@@ -69,9 +69,11 @@ void train3::read_img_datas(const std::string &imglist_file)
     m_train_paras.resize(m_para_num,m_img_num);
     m_train_shapes.resize(Face::get_shape_pcanum(),m_img_num);
     m_train_exps.resize(Face::get_exp_pcanum(),m_img_num);
-    m_visible_features.resize(Face::get_keypoints_size()*m_feature_size,m_img_num);
+    m_visible_features.resize(Face::get_featurekeypoints_size()*m_feature_size,m_img_num);
     m_train_keypos.resize(2*Face::get_keypoints_size(),m_img_num);
+    m_feature_keypos.resize(2*Face::get_featurekeypoints_size(),m_img_num);
     m_keypos_visible.resize(Face::get_keypoints_size(),m_img_num);
+    m_featurekeypos_visible.resize(Face::get_featurekeypoints_size(),m_img_num);
 
 }
 
@@ -103,7 +105,7 @@ void train3::read_test_datas(const std::string &imglist_file)
     m_train_paras.resize(m_para_num,m_img_num);
     m_train_shapes.resize(Face::get_shape_pcanum(),m_img_num);
     m_train_exps.resize(Face::get_exp_pcanum(),m_img_num);
-    m_visible_features.resize(Face::get_keypoints_size()*m_feature_size,m_img_num);
+    m_visible_features.resize(Face::get_featurekeypoints_size()*m_feature_size,m_img_num);
     m_train_keypos.resize(2*Face::get_keypoints_size(),m_img_num);
     m_keypos_visible.resize(Face::get_keypoints_size(),m_img_num);
 }
@@ -155,6 +157,7 @@ void train3::test_model()
     m_casscade_level=-1;
     for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
     {
+        LOG(INFO)<<m_casscade_level<<" iteration start.";
         compute_all_visible_features_multi_thread();
         update_keypos_R();
         update_para_R();
@@ -269,13 +272,16 @@ void train3::compute_keypos_visibility()
         Eigen::Matrix3f R = transformation.rotation();
         std::vector<bool> visuals;
         compute_keypoint_visible_multi_thread(R,Face::get_keypoints(),visuals,thread_id);
+        std::vector<bool> fea_visuals;
+        compute_keypoint_visible_multi_thread(R,Face::get_featurekeypoints(),fea_visuals,thread_id);
+        //process on keypos
         Eigen::MatrixXf temp_v(3,Face::get_keypoints_size());
         for(int k=0;k<Face::get_keypoints_size();k++)
             temp_v.col(k) = verts.col(Face::get_keypoint_id(k));
         temp_v = R*temp_v;
         temp_v*=scale;
         Eigen::Vector3f trans;  trans(0) = tx;  trans(1) = ty;  trans(2) = 0.0;
-        temp_v.colwise() += trans;
+        temp_v.colwise() += trans;        
         Eigen::MatrixXf temp = temp_v.block(0,0,2,Face::get_keypoints_size());
         //convert to left up origin
         for(int k=0;k<Face::get_keypoints_size();k++)
@@ -287,9 +293,28 @@ void train3::compute_keypos_visibility()
                 m_keypos_visible(k,i) = 1;
             else
                 m_keypos_visible(k,i) = 0;
+        //process on featurekeypos
+        Eigen::MatrixXf ftemp_v(3,Face::get_featurekeypoints_size());
+        for(int k=0;k<Face::get_featurekeypoints_size();k++)
+            ftemp_v.col(k) = verts.col(Face::get_featurekeypoint_id(k));
+        ftemp_v = R*ftemp_v;
+        ftemp_v*=scale;
+        Eigen::Vector3f ftrans;  ftrans(0) = tx;  ftrans(1) = ty;  ftrans(2) = 0.0;
+        ftemp_v.colwise() += ftrans;
+        Eigen::MatrixXf ftemp = ftemp_v.block(0,0,2,Face::get_featurekeypoints_size());
+        //convert to left up origin
+        for(int k=0;k<Face::get_featurekeypoints_size();k++)
+            ftemp(1,k) = data->img_length()-ftemp(1,k);
+        ftemp.resize(ftemp.size(),1);
+        m_feature_keypos.col(i) = ftemp;
+        for(int k=0;k<fea_visuals.size();k++)
+            if(fea_visuals[k])
+                m_featurekeypos_visible(k,i) = 1;
+            else
+                m_featurekeypos_visible(k,i) = 0;
 
         nums[thread_id]=nums[thread_id]+1;
-        LOG_IF(INFO,nums.sum()%500==0)<<"img keypos visibility have been computed "<<nums.sum();
+        LOG_IF(INFO,nums.sum()%2000==0)<<"img keypos visibility have been computed "<<nums.sum();
     }
     LOG(INFO)<<"done.";
 }
@@ -424,13 +449,13 @@ void train3::compute_all_visible_features_multi_thread()
         Caffe::SetDevice(m_gpuid_for_feature_computes[thread_id]);
 #endif
         face_img *data = m_face_imgs_pointer[i];
-        Eigen::VectorXf visible_features(m_feature_size*Face::get_keypoints_size());
+        Eigen::VectorXf visible_features(m_feature_size*Face::get_featurekeypoints_size());
         Eigen::MatrixXf keypos;
-        keypos=m_train_keypos.col(i);
+        keypos=m_feature_keypos.col(i);
         keypos.resize(2,keypos.size()/2);
-        std::vector<bool> visibility(m_keypos_visible.rows(),false);
-        for(int k=0;k<m_keypos_visible.rows();k++)
-            if(m_keypos_visible(k,i)==1)
+        std::vector<bool> visibility(m_featurekeypos_visible.rows(),false);
+        for(int k=0;k<m_featurekeypos_visible.rows();k++)
+            if(m_featurekeypos_visible(k,i)==1)
                 visibility[k] = true;
             else
                 visibility[k] = false;
@@ -447,7 +472,7 @@ void train3::compute_all_visible_features_multi_thread()
         m_visible_features.col(i) = visible_features;
 
         nums[thread_id]=nums[thread_id]+1;
-        LOG_IF(INFO,nums.sum()%500==0)<<"face img features have been computed "<<nums.sum();
+        LOG_IF(INFO,nums.sum()%2000==0)<<"face img features have been computed "<<nums.sum();
     }
     LOG(INFO)<<"done!";
 }
@@ -579,7 +604,7 @@ void train3::optimize_shape_exp()
         m_train_exps.col(i) = x.block(Face::get_shape_pcanum(),0,Face::get_exp_pcanum(),1);
 
         nums[thread_id]=nums[thread_id]+1;
-        LOG_IF(INFO,nums.sum()%500==0)<<"face img shape exp have been computed "<<nums.sum();
+        LOG_IF(INFO,nums.sum()%2000==0)<<"face img shape exp have been computed "<<nums.sum();
     }
     LOG(INFO)<<"done.";
 }

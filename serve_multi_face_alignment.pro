@@ -17,6 +17,7 @@ SOURCES += serve_main.cpp \
     face_imgs.cpp \
     face_img.cpp \
     part_3dmm_face.cpp \
+    whole_3dmm_face.cpp \
     train.cpp \
     train2.cpp \
     train3.cpp \
@@ -30,6 +31,7 @@ HEADERS += \
     face_imgs.h \
     face_img.h \
     part_3dmm_face.h \
+    whole_3dmm_face.h \
     tri_mesh.h \
     train.h \
     train2.h \

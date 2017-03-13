@@ -79,6 +79,8 @@ private:
 
     Eigen::MatrixXf m_train_keypos; //left top origine
     Eigen::MatrixXi m_keypos_visible;   //keypoints visibility
+    Eigen::MatrixXf m_feature_keypos;
+    Eigen::MatrixXi m_featurekeypos_visible; //featurekeypoints visibility
     Eigen::MatrixXf m_train_paras;
     Eigen::MatrixXf m_train_shapes;
     Eigen::MatrixXf m_train_exps;

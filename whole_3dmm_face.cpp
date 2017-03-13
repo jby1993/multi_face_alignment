@@ -12,6 +12,7 @@ static int m_shape_pcanum;
 static int m_exp_pcanum;
 static int m_whole_vnum;
 static std::vector<int> m_whole_keypoints;
+static std::vector<int> m_feature_keypoints;
 static bool is_3DMM_initialized=false;
 whole_3dmm_face::whole_3dmm_face()
 {
@@ -130,9 +131,19 @@ int whole_3dmm_face::get_keypoints_size()
     return m_whole_keypoints.size();
 }
 
+int whole_3dmm_face::get_featurekeypoints_size()
+{
+    return m_feature_keypoints.size();
+}
+
 const std::vector<int> &whole_3dmm_face::get_keypoints()
 {
     return m_whole_keypoints;
+}
+
+const std::vector<int> &whole_3dmm_face::get_featurekeypoints()
+{
+    return m_feature_keypoints;
 }
 
 int whole_3dmm_face::get_keypoint_id(int i)
@@ -141,6 +152,14 @@ int whole_3dmm_face::get_keypoint_id(int i)
     CHECK_LT(i,get_keypoints_size())<<"whole_3dmm_face::get_keypoint_id id "<<i<<" range wrong!";
 
     return m_whole_keypoints[i];
+}
+
+int whole_3dmm_face::get_featurekeypoint_id(int i)
+{
+    CHECK_GE(i,0)<<"whole_3dmm_face::get_featurekeypoint_id id "<<i<<" range wrong!";
+    CHECK_LT(i,get_featurekeypoints_size())<<"whole_3dmm_face::get_featurekeypoint_id id "<<i<<" range wrong!";
+
+    return m_feature_keypoints[i];
 }
 
 const MatrixXf &whole_3dmm_face::get_shape_st()
@@ -201,6 +220,7 @@ void whole_3dmm_face::initial()
         io_utils::read_pca_models("../resource/zhu_3dmm/ExpPCA.bin",m_mean_exp,m_pca_exp,m_exp_st,
                                   m_whole_vnum,m_exp_pcanum);
         io_utils::read_all_type_file_to_vector<int>("../resource/zhu_3dmm/whole_MultiPie68_keypoints.txt",m_whole_keypoints);
+        io_utils::read_all_type_file_to_vector<int>("../resource/zhu_3dmm/whole_feature_keypoints.txt",m_feature_keypoints);
         is_3DMM_initialized = true;
     }
 
