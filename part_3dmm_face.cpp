@@ -100,6 +100,13 @@ const TriMesh &part_3DMM_face::get_part_face()
     return m_part_face;
 }
 
+const TriMesh &part_3DMM_face::get_whole_face()
+{
+    if(!is_whole_updated)
+        update_mesh(true);
+    return m_whole_face;
+}
+
 void part_3DMM_face::get_mean_normal(int v_id, TriMesh::Normal &mean_normal,int neighbor_size, bool is_whole)
 {
     if(!is_whole_updated)   update_mesh(true);

@@ -10,10 +10,11 @@ train3::train3(int thread_num)
     m_para_num = 6;
     m_casscade_sum = 6;
     m_threadnum_for_compute_features=thread_num;
+    m_normalize_feature=true;
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
 //        m_feature_detectors.push_back(CNNDenseFeature());
-        m_3dmm_meshs.push_back(part_3DMM_face());
+        m_3dmm_meshs.push_back(whole_3dmm_face());
 //        std::cout<<i<<std::endl;
     }
 //    m_feature_detectors.resize(m_threadnum_for_compute_features,CNNDenseFeature());
@@ -49,7 +50,7 @@ void train3::read_img_datas(const std::string &imglist_file)
         tstr.remove(tstr.size()-4,4);
         landname = tstr.toStdString();
         landname += "_keypos.txt";
-        face_img temp(m_para_num,Face::get_whole_keypoint_size(),facename);
+        face_img temp(m_para_num,Face::get_keypoints_size(),facename);
         temp.read_img(m_img_root+imgname);
         temp.read_para(m_poses_root+posename);
         temp.read_land(m_lands_root+landname);
@@ -68,10 +69,43 @@ void train3::read_img_datas(const std::string &imglist_file)
     m_train_paras.resize(m_para_num,m_img_num);
     m_train_shapes.resize(Face::get_shape_pcanum(),m_img_num);
     m_train_exps.resize(Face::get_exp_pcanum(),m_img_num);
-    m_visible_features.resize(Face::get_whole_keypoint_size()*m_feature_size,m_img_num);
-    m_train_keypos.resize(2*Face::get_whole_keypoint_size(),m_img_num);
-    m_keypos_visible.resize(Face::get_whole_keypoint_size(),m_img_num);
+    m_visible_features.resize(Face::get_keypoints_size()*m_feature_size,m_img_num);
+    m_train_keypos.resize(2*Face::get_keypoints_size(),m_img_num);
+    m_keypos_visible.resize(Face::get_keypoints_size(),m_img_num);
 
+}
+
+void train3::read_test_datas(const std::string &imglist_file)
+{
+    std::vector<std::string> imglist;
+    io_utils::read_all_type_file_to_vector<std::string>(imglist_file,imglist);
+    LOG(INFO)<<"start read imgs...";
+    for(int i=0; i<imglist.size(); i++)
+    {
+        std::string imgname = imglist[i];
+        QString tstr(imgname.data());
+        tstr.remove(tstr.size()-4,4);
+        std::string facename = tstr.toStdString();
+        face_img temp(m_para_num,Face::get_keypoints_size(),facename);
+        temp.read_img(m_img_root+imgname);
+        m_face_imgs.push_back(temp);
+        LOG_IF(INFO,i%1000==999)<<i<<" imgs have been readed.";
+    }
+    m_img_num = m_face_imgs.size();
+    LOG(INFO)<<"read "<<m_img_num<<" imgs";
+
+    //initial need by multithread feature computation variables
+    m_face_imgs_pointer.clear();
+    std::list<face_img>::iterator iter=m_face_imgs.begin();
+    for(;iter!=m_face_imgs.end();iter++)
+        m_face_imgs_pointer.push_back(&(*iter));
+
+    m_train_paras.resize(m_para_num,m_img_num);
+    m_train_shapes.resize(Face::get_shape_pcanum(),m_img_num);
+    m_train_exps.resize(Face::get_exp_pcanum(),m_img_num);
+    m_visible_features.resize(Face::get_keypoints_size()*m_feature_size,m_img_num);
+    m_train_keypos.resize(2*Face::get_keypoints_size(),m_img_num);
+    m_keypos_visible.resize(Face::get_keypoints_size(),m_img_num);
 }
 
 void train3::train_model()
@@ -84,7 +118,7 @@ void train3::train_model()
     show_delta_para_info();
     m_keypos_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
     m_para_Rs.resize(m_casscade_sum, Eigen::MatrixXf());
-    int pre_trained_num = 3;
+    int pre_trained_num = 0;
     for(int i=0;i<pre_trained_num;i++)
     {
         read_keypos_R(m_savemodel_root,i);
@@ -109,6 +143,7 @@ void train3::train_model()
 
         optimize_shape_exp();
         compute_keypos_visibility();
+        show_delta_keypos_info();
     }
 }
 
@@ -118,7 +153,7 @@ void train3::test_model()
     initial_para();
     compute_keypos_visibility();
     m_casscade_level=-1;
-    for(m_casscade_level=0; m_casscade_level<m_casscade_sum-1; m_casscade_level++)
+    for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
     {
         compute_all_visible_features_multi_thread();
         update_keypos_R();
@@ -127,10 +162,10 @@ void train3::test_model()
         optimize_shape_exp();
         compute_keypos_visibility();
     }
-    compute_all_visible_features_multi_thread();
-    update_keypos_R();
-    update_para_R();
-    optimize_shape_exp();
+//    compute_all_visible_features_multi_thread();
+//    update_keypos_R();
+//    update_para_R();
+//    optimize_shape_exp();
 }
 
 void train3::save_verify_result(const std::string &root)
@@ -171,13 +206,12 @@ void train3::read_trained_model(const std::string &root, int casscade_num)
 void train3::set_feature_compute_gpu(const std::vector<int> ids)
 {
     m_feature_detectors.clear();
-    bool normalized = false;
     if(ids.size()!=m_threadnum_for_compute_features)
     {
         LOG(FATAL)<<"train::set_feature_compute_gpu ids size wrong";
         m_gpuid_for_feature_computes.resize(1,0);
 #ifdef USE_CNNFEATURE
-        m_feature_detectors.push_back(CNNDenseFeature(0,normalized));
+        m_feature_detectors.push_back(CNNDenseFeature(0,m_normalize_feature));
 #else
        m_feature_detectors.push_back(SIFTDectector());
        LOG(INFO)<<"SIFT dectector 0 has been build.";
@@ -187,7 +221,7 @@ void train3::set_feature_compute_gpu(const std::vector<int> ids)
     for(int i=0;i<m_threadnum_for_compute_features;i++)
     {
 #ifdef USE_CNNFEATURE
-        m_feature_detectors.push_back(CNNDenseFeature(m_gpuid_for_feature_computes[i],normalized));
+        m_feature_detectors.push_back(CNNDenseFeature(m_gpuid_for_feature_computes[i],m_normalize_feature));
         LOG(INFO)<<"Net "<<i<<" has been build.";
 #else
        m_feature_detectors.push_back(SIFTDectector());
@@ -221,7 +255,7 @@ void train3::compute_keypos_visibility()
         m_3dmm_meshs[thread_id].set_shape(m_train_shapes.col(i));
         m_3dmm_meshs[thread_id].set_exp(m_train_exps.col(i));
         MatrixXf verts;
-        m_3dmm_meshs[thread_id].get_vertex_matrix(verts, true);
+        m_3dmm_meshs[thread_id].get_vertex_matrix(verts);
 
         float *para = m_train_paras.col(i).data();
         float scale = para[0];
@@ -234,17 +268,17 @@ void train3::compute_keypos_visibility()
                           Eigen::AngleAxisf(az, Eigen::Vector3f::UnitZ());
         Eigen::Matrix3f R = transformation.rotation();
         std::vector<bool> visuals;
-        compute_keypoint_visible_multi_thread(R,Face::get_whole_keypoint(),visuals,thread_id);
-        Eigen::MatrixXf temp_v(3,Face::get_whole_keypoint_size());
-        for(int k=0;k<Face::get_whole_keypoint_size();k++)
-            temp_v.col(k) = verts.col(Face::get_whole_keypoint_id(k));
+        compute_keypoint_visible_multi_thread(R,Face::get_keypoints(),visuals,thread_id);
+        Eigen::MatrixXf temp_v(3,Face::get_keypoints_size());
+        for(int k=0;k<Face::get_keypoints_size();k++)
+            temp_v.col(k) = verts.col(Face::get_keypoint_id(k));
         temp_v = R*temp_v;
         temp_v*=scale;
         Eigen::Vector3f trans;  trans(0) = tx;  trans(1) = ty;  trans(2) = 0.0;
         temp_v.colwise() += trans;
-        Eigen::MatrixXf temp = temp_v.block(0,0,2,Face::get_whole_keypoint_size());
+        Eigen::MatrixXf temp = temp_v.block(0,0,2,Face::get_keypoints_size());
         //convert to left up origin
-        for(int k=0;k<Face::get_whole_keypoint_size();k++)
+        for(int k=0;k<Face::get_keypoints_size();k++)
             temp(1,k) = data->img_length()-temp(1,k);
         temp.resize(temp.size(),1);
         m_train_keypos.col(i) = temp;
@@ -298,7 +332,7 @@ void train3::compute_keypoint_visible_multi_thread(const MatrixXf &R, const std:
     {
         int id = ids[i];
         TriMesh::Normal normal;
-        m_3dmm_meshs[thread_id].get_mean_normal(id,normal,3,true);
+        m_3dmm_meshs[thread_id].get_mean_normal(id,normal,3);
         Eigen::Vector3f Rnormal = Eigen::Map<Eigen::Vector3f>(normal.data());
         Rnormal =R*Rnormal;
         float val = Rnormal(2);
@@ -320,7 +354,7 @@ void train3::compute_delta_para(MatrixXf &delta_para)
 
 void train3::compute_delta_keypos(MatrixXf &delta_keypos)
 {
-    delta_keypos.resize(2*Face::get_whole_keypoint_size(),m_img_num);
+    delta_keypos.resize(2*Face::get_keypoints_size(),m_img_num);
     for(int i=0; i<m_face_imgs_pointer.size(); i++)
     {
             delta_keypos.col(i) = m_face_imgs_pointer[i]->get_groundtruth_land()-m_train_keypos.col(i);
@@ -390,7 +424,7 @@ void train3::compute_all_visible_features_multi_thread()
         Caffe::SetDevice(m_gpuid_for_feature_computes[thread_id]);
 #endif
         face_img *data = m_face_imgs_pointer[i];
-        Eigen::VectorXf visible_features(m_feature_size*Face::get_whole_keypoint_size());
+        Eigen::VectorXf visible_features(m_feature_size*Face::get_keypoints_size());
         Eigen::MatrixXf keypos;
         keypos=m_train_keypos.col(i);
         keypos.resize(2,keypos.size()/2);
@@ -404,7 +438,7 @@ void train3::compute_all_visible_features_multi_thread()
         m_feature_detectors[thread_id].set_data(data->get_img_data());
         m_feature_detectors[thread_id].get_compute_visible_posfeatures(keypos,visibility,visible_features);
 #else
-        Eigen::VectorXf scales(Face::get_whole_keypoint_size());
+        Eigen::VectorXf scales(Face::get_keypoints_size());
         scales.setOnes();
         scales *= 6.0;
         m_feature_detectors[thread_id].DescriptorOnCustomPoints(data->get_img(),data->img_length(),data->img_length(),
@@ -488,21 +522,21 @@ void train3::optimize_shape_exp()
     Eigen::VectorXi nums(m_threadnum_for_compute_features);
     nums.setZero();
 #ifdef USE_CNNFEATURE
-    float lamda = 1.0;
+    float lamda = 10.0;
 #else
     float lamda = 0.01;
 #endif
     Eigen::MatrixXf keypos_mean,keypos_base;
-    Face::get_mean_vertex_base_on_ids(Face::get_whole_keypoint(),keypos_mean,true);
-    Face::get_vertex_base_on_ids(Face::get_whole_keypoint(),keypos_base,true);
+    Face::get_mean_vertex_base_on_ids(Face::get_keypoints(),keypos_mean);
+    Face::get_vertex_base_on_ids(Face::get_keypoints(),keypos_base);
     #pragma omp parallel for num_threads(m_threadnum_for_compute_features)
     for(int i=0;i<m_face_imgs_pointer.size();i++)
     {
         int thread_id=omp_get_thread_num();
         face_img *data = m_face_imgs_pointer[i];
-        Eigen::MatrixXf lhs(Face::get_whole_keypoint_size()*2+Face::get_shape_pcanum()+Face::get_exp_pcanum(),
+        Eigen::MatrixXf lhs(Face::get_keypoints_size()*2+Face::get_shape_pcanum()+Face::get_exp_pcanum(),
                             Face::get_shape_pcanum()+Face::get_exp_pcanum());
-        Eigen::MatrixXf rhs(Face::get_whole_keypoint_size()*2+Face::get_shape_pcanum()+Face::get_exp_pcanum(),1);
+        Eigen::MatrixXf rhs(Face::get_keypoints_size()*2+Face::get_shape_pcanum()+Face::get_exp_pcanum(),1);
 
         float *para = m_train_paras.col(i).data();
         float scale = para[0];
@@ -526,19 +560,19 @@ void train3::optimize_shape_exp()
             keypos(1,k) = data->img_length()-keypos(1,k);
         srmt.resize(srmt.size(),1);
         keypos.resize(keypos.size(),1);
-        rhs.block(0,0,Face::get_whole_keypoint_size()*2,1)=keypos-srmt;
+        rhs.block(0,0,Face::get_keypoints_size()*2,1)=keypos-srmt;
 
         temp.resize(keypos_base.rows(),keypos_base.cols());
-        for(int k=0;k<Face::get_whole_keypoint_size();k++)
+        for(int k=0;k<Face::get_keypoints_size();k++)
         {
             temp.block(3*k,0,3,temp.cols()) = scale*R*keypos_base.block(3*k,0,3,keypos_base.cols());
             lhs.block(2*k,0,2,lhs.cols()) = temp.block(3*k,0,2,temp.cols());
         }
 
         //add regular
-        lhs.block(Face::get_whole_keypoint_size()*2,0,lhs.cols(),lhs.cols())=
+        lhs.block(Face::get_keypoints_size()*2,0,lhs.cols(),lhs.cols())=
                 (lamda/m_groundtruth_shapes_exps_sd.array()).matrix().asDiagonal();
-        rhs.block(Face::get_whole_keypoint_size()*2,0,lhs.cols(),1).setZero();
+        rhs.block(Face::get_keypoints_size()*2,0,lhs.cols(),1).setZero();
         //use jacobi decomposion to solve the least square problem
         Eigen::VectorXf x=lhs.jacobiSvd(ComputeThinU | ComputeThinV).solve(rhs);
         m_train_shapes.col(i) = x.block(0,0,Face::get_shape_pcanum(),1);

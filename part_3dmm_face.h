@@ -15,6 +15,7 @@ public:
     void set_shape_exp(const std::vector<float> &para);
     void get_vertex_matrix(MatrixXf &verts, bool is_whole);
     const TriMesh& get_part_face();
+    const TriMesh& get_whole_face();
     void get_mean_normal(int v_id, TriMesh::Normal &mean_normal, int neighbor_size=3, bool is_whole=false);
 
     void get_neighborIds_around_v(int v_id, std::vector<int> &ids, int neighbor_size = 10, bool is_whole=false);

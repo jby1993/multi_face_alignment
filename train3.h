@@ -2,15 +2,16 @@
 #define TRAIN3_H
 #include <list>
 #include "face_img.h"
-#include "part_3dmm_face.h"
+#include "whole_3dmm_face.h"
 #include "cnndensefeature.h"
 #include "siftdectector.h"
 class train3
 {
-    typedef part_3DMM_face Face;
+    typedef whole_3dmm_face Face;
 public:
     train3(int thread_num);
     void read_img_datas(const std::string &imglist_file);
+    void read_test_datas(const std::string &imglist_file);
     void train_model();
     void test_model();
     void save_verify_result(const std::string& root);
@@ -69,7 +70,7 @@ private:
 #else
     std::vector<SIFTDectector>  m_feature_detectors;
 #endif
-    std::vector<part_3DMM_face>  m_3dmm_meshs;
+    std::vector<whole_3dmm_face>  m_3dmm_meshs;
     std::string m_img_root;
     std::string m_lands_root;
     std::string m_poses_root;
@@ -88,6 +89,7 @@ private:
     Eigen::VectorXf m_groundtruth_shapes_exps_sd;
     std::vector<Eigen::MatrixXf> m_keypos_Rs;
     std::vector<Eigen::MatrixXf> m_para_Rs;
+    bool m_normalize_feature;
 
 };
 
