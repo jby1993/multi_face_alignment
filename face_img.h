@@ -2,6 +2,7 @@
 #define FACE_IMG_H
 #include <string>
 #include <Eigen/Dense>
+#include <vector>
 //all train img are normalized, 224*224, left top origin, row major
 //this is used for one img train without mesh ground truth, not multi imgs.
 class face_img
