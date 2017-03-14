@@ -96,7 +96,7 @@ void call_meodule(train3 *compute)
     {
         CHECK_GT(FLAGS_read_model_root.size(),0)<<"VERIFY phase need a trained model";
         CHECK_GT(FLAGS_read_casscade_num,0)<<"VERIFY phase need a correct casscade num";
-//        compute->read_test_img_datas(FLAGS_meshpara_list,FLAGS_permesh_imglists);
+        compute->read_test_datas(FLAGS_permesh_imglists);
         compute->read_trained_model(FLAGS_read_model_root,FLAGS_read_casscade_num);
         compute->test_model();
         compute->save_verify_result(FLAGS_save_root);
