@@ -465,10 +465,10 @@ void train3::compute_all_visible_features_multi_thread()
         m_feature_detectors[thread_id].set_data(data->get_img_data());
         m_feature_detectors[thread_id].get_compute_visible_posfeatures(keypos,visibility,visible_features);
 #else
-        Eigen::VectorXf scales(Face::get_keypoints_size());
+        Eigen::VectorXf scales(Face::get_featurekeypoints_size());
         scales.setOnes();
         scales *= 6.0;
-        m_feature_detectors[thread_id].DescriptorOnCustomPoints(data->get_img(),data->img_length(),data->img_length(),
+        m_feature_detectors[thread_id].DescriptorOnCustomPoints(data->get_img_data(),data->img_length(),data->img_length(),
                                                                 visibility,keypos,scales,visible_features);
 #endif
         m_visible_features.col(i) = visible_features;
@@ -484,7 +484,7 @@ void train3::compute_update_keypos_R()
 #ifdef USE_CNNFEATURE
     float lamda = 20.0;
 #else
-    float lamda = 5.0;
+    float lamda = 20.0;
 #endif
     MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
     f.block(0,0,m_visible_features.rows(),m_visible_features.cols()) = m_visible_features;
@@ -505,7 +505,7 @@ void train3::compute_update_para_R()
 #ifdef USE_CNNFEATURE
     float lamda = 10.0;
 #else
-    float lamda = 5.0;
+    float lamda = 10.0;
 #endif
     //use feature to infer delta_para
     MatrixXf f(m_visible_features.rows()+1,m_visible_features.cols());
@@ -551,7 +551,7 @@ void train3::optimize_shape_exp()
 #ifdef USE_CNNFEATURE
     float lamda = 100.0;
 #else
-    float lamda = 0.01;
+    float lamda = 100.0;
 #endif
     Eigen::MatrixXf keypos_mean,keypos_base;
     Face::get_mean_vertex_base_on_ids(Face::get_keypoints(),keypos_mean);
