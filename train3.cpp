@@ -107,7 +107,9 @@ void train3::read_test_datas(const std::string &imglist_file)
     m_train_exps.resize(Face::get_exp_pcanum(),m_img_num);
     m_visible_features.resize(Face::get_featurekeypoints_size()*m_feature_size,m_img_num);
     m_train_keypos.resize(2*Face::get_keypoints_size(),m_img_num);
+    m_feature_keypos.resize(2*Face::get_featurekeypoints_size(),m_img_num);
     m_keypos_visible.resize(Face::get_keypoints_size(),m_img_num);
+    m_featurekeypos_visible.resize(Face::get_featurekeypoints_size(),m_img_num);
 }
 
 void train3::train_model()
