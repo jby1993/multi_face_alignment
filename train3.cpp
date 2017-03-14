@@ -157,7 +157,7 @@ void train3::test_model()
     initial_para();
     compute_keypos_visibility();
     m_casscade_level=-1;
-    for(m_casscade_level=0; m_casscade_level<m_casscade_sum; m_casscade_level++)
+    for(m_casscade_level=0; m_casscade_level<m_casscade_sum-1; m_casscade_level++)
     {
         LOG(INFO)<<m_casscade_level<<" iteration start.";
         compute_all_visible_features_multi_thread();
@@ -167,10 +167,10 @@ void train3::test_model()
         optimize_shape_exp();
         compute_keypos_visibility();
     }
-//    compute_all_visible_features_multi_thread();
-//    update_keypos_R();
-//    update_para_R();
-//    optimize_shape_exp();
+    compute_all_visible_features_multi_thread();
+    update_keypos_R();
+    update_para_R();
+    optimize_shape_exp();
 }
 
 void train3::save_verify_result(const std::string &root)
